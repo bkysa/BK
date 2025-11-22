@@ -855,21 +855,22 @@
                 
                 let targetOrder = orders.find(o => o.id === newMat.orderId);
                 
+                // 프로젝트가 선택되지 않았을 경우 '기타 자재 발주'로 자동 연결 또는 생성
                 if (!targetOrder && !newMat.orderId) {
-                    if(window.confirm("선택된 프로젝트가 없습니다. '기타 발주' 항목으로 새로 만들까요?")) {
-                        const miscTask = {
-                            id: `misc-${Date.now()}`,
+                    // 기존에 있는 '기타 자재 발주' 프로젝트 찾기 (완료되지 않은 것)
+                    targetOrder = orders.find(o => o.itemName === '기타 자재 발주' && !['납품완료'].includes(o.status));
+
+                    if (!targetOrder) {
+                        // 없으면 새로 생성 (mock- ID를 사용하여 saveOrder 시 addDoc 트리거)
+                        targetOrder = {
+                            id: `mock-misc-${Date.now()}`, 
                             itemName: '기타 자재 발주',
                             clientName: '내부',
                             status: '작업중',
-                            createdAt: new Date(), 
                             orderDate: new Date().toISOString().split('T')[0],
-                            deliveryDate: new Date().toISOString().split('T')[0],
+                            deliveryDate: '',
                             materials: []
                         };
-                        targetOrder = miscTask;
-                    } else {
-                        return;
                     }
                 }
 
