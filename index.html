@@ -3,574 +3,1072 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>숨쉬는 깡통 - 작업 관리 시스템</title>
-    
-    <!-- 1. 디자인 도구 (Tailwind CSS) -->
+    <title>숨쉬는 깡통 - 제작/발주 관리 시스템</title>
+    <!-- Load Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- 2. 리액트 도구 (Preact/React) -->
-    <script type="importmap">
-        {
-            "imports": {
-                "react": "https://esm.sh/react@18.2.0",
-                "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-                "lucide-react": "https://esm.sh/lucide-react@0.344.0"
-            }
-        }
-    </script>
-    
-    <!-- 3. 번역기 (Babel) -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
+    <!-- Load Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <!-- Inter Font -->
     <style>
-        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-        body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
     </style>
 </head>
-<body>
-    <div id="root"></div>
+<body class="bg-slate-50">
 
-    <script type="text/babel" data-type="module">
-        import React, { useState, useEffect, useMemo, useRef } from 'react';
-        import { createRoot } from 'react-dom/client';
-        import {
-            LayoutDashboard, Plus, FileText, Calendar as CalendarIcon,
-            Package, ChevronRight, ChevronLeft, Trash2, Edit3, Download, Link as LinkIcon,
-            ChevronDown, ChevronUp, Wifi, Mail, CheckCircle2, Factory, ArrowRight,
-            Phone, MapPin, Bell, X, Truck, Search, AlertCircle, Map, Sparkles, Paperclip, File, Lock, Key
-        } from 'lucide-react';
+    <div id="app" class="flex h-screen overflow-hidden">
+        <!-- Application will render here -->
+    </div>
 
-        // Firebase Imports (CDN)
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-        import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-        import {
-            getFirestore, collection, addDoc, updateDoc, deleteDoc,
-            doc, onSnapshot, query, orderBy, serverTimestamp
-        } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+    <!-- Custom Alert/Confirm Modal Structure -->
+    <div id="custom-modal" class="hidden fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4 transition-opacity duration-300">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm">
+            <h3 id="modal-title" class="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2"></h3>
+            <p id="modal-message" class="text-sm text-gray-600 mb-6"></p>
+            <div id="modal-actions" class="flex justify-end gap-3">
+                <!-- Buttons rendered by JS -->
+            </div>
+        </div>
+    </div>
 
-        // ---------------------------------------------------------
-        // ✅ Firebase 설정 (웅니가 입력한 값 유지!)
-        // ---------------------------------------------------------
-        const firebaseConfig = {
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, setDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Configuration and Constants ---
+        // 사용자님이 제공해주신 Firebase Config
+        const FIREBASE_CONFIG = {
             apiKey: "AIzaSyB5W8qJbYMNyzPu8jmbAifCBH9qgZsQOJA",
             authDomain: "bk-manager-784a5.firebaseapp.com",
             projectId: "bk-manager-784a5",
             storageBucket: "bk-manager-784a5.firebasestorage.app",
             messagingSenderId: "16230700058",
-            appId: "1:16230700058:web:833a3d16f54cdd73d2ada3"
+            appId: "1:16230700058:web:833a3d16f54cdd73d2ada3",
+            measurementId: "G-PMGKK5F8CP"
         };
-
-        // ---------------------------------------------------------
-        // ✅ Gemini API 키
-        // ---------------------------------------------------------
-        const GEMINI_API_KEY = "AIzaSyAAuopjonzUutbkTZXv5PbqfKz2hDsNRes"; 
-
-        // --- Constants ---
+        const APP_ID = FIREBASE_CONFIG.projectId; // Project ID를 앱 ID로 사용
+        const ACCESS_CODES = {
+            '4545': { role: 'staff', name: '제작팀 직원' },
+            '2203': { role: 'manager', name: '총괄 관리자' }
+        };
         const COMPANY_INFO = {
             name: '숨쉬는 깡통',
             address: '경기도 포천시 군내면 유교리 243-7',
-            lat: 37.885, 
-            lng: 127.205, 
             mapUrl: 'https://map.naver.com/p/search/경기도 포천시 군내면 유교리 243-7'
         };
-
         const SUPPLIER_INFO = {
-            '성수금속': { phone: '02-1234-5678', email: 'order@sungsu.com', address: '서울 성동구 성수이로 123', lat: 37.5445, lng: 127.0560 },
-            '을지레이저': { phone: '02-2222-3333', email: 'laser@eulji.net', address: '서울 중구 을지로 4가 56', lat: 37.5660, lng: 126.9950 },
-            '청계도장': { phone: '02-3333-4444', email: 'paint@chunggye.com', address: '서울 중구 청계천로 789', lat: 37.5690, lng: 127.0100 },
-            '태양볼트': { phone: '02-5555-6666', email: 'bolt@sun.com', address: '서울 구로구 구로동 11', lat: 37.4850, lng: 126.8850 },
-            '대한아크릴': { phone: '02-7777-8888', email: 'acryl@daehan.com', address: '서울 중구 방산시장 A동', lat: 37.5670, lng: 127.0000 }
+            '성수금속': { phone: '02-1234-5678', email: 'order@sungsu.com', address: '서울 성동구 성수이로 123' },
+            '을지레이저': { phone: '02-2222-3333', email: 'laser@eulji.net', address: '서울 중구 을지로 4가 56' },
+            '청계도장': { phone: '02-3333-4444', email: 'paint@chunggye.com', address: '서울 중구 청계천로 789' },
+            '태양볼트': { phone: '02-5555-6666', email: 'bolt@sun.com', address: '서울 구로구 구로동 11' },
+            '대한아크릴': { phone: '02-7777-8888', email: 'acryl@daehan.com', address: '서울 중구 방산시장 A동' }
         };
 
-        // 🚨 예시 데이터 복구 (연결 안 됐을 때 이거라도 보여줘야 해!)
-        const MOCK_DATA = [
-            {
-                id: 'mock-1', displayId: 'ORD-24-101', itemName: '성수동 카페 황동 테이블', clientName: '카페 루미에르',
-                manager: '김철수', technician: '이장인', orderDate: '2024-11-01',
-                deliveryDate: new Date(Date.now() + 86400000 * 1).toISOString().split('T')[0], 
-                status: '제작중',
-                description: '상판 헤어라인 마감 꼼꼼하게 부탁드립니다.',
-                materials: [
-                    { id: 11, supplier: '성수금속', item: '황동 파이프 30mm', quantity: '6본', status: '입고완료', date: '2024-11-15' },
-                    { id: 12, supplier: '을지레이저', item: '상판 레이저 가공', quantity: '10개', status: '제작완료', date: '2024-11-18' }
-                ],
-                files: [{ name: 'Table_Design_v3.pdf', url: '#', id: 101 }]
-            },
-            {
-                id: 'mock-2', displayId: 'ORD-24-102', itemName: '압구정 갤러리 입간판', clientName: '갤러리 큐브',
-                manager: '박영희', technician: '최고수', orderDate: '2024-11-05',
-                deliveryDate: new Date().toISOString().split('T')[0], 
-                status: '도장/마감',
-                description: '무광 블랙 분체도장. 로고 시트지 작업 포함.',
-                materials: [
-                    { id: 21, supplier: '을지레이저', item: '갈바 절곡', quantity: '2판', status: '입고완료', date: '2024-11-10' },
-                    { id: 22, supplier: '청계도장', item: '분체 도장(Black)', quantity: '1식', status: '발주중', date: '2024-11-19' }
-                ],
-                files: []
+        // --- Firebase Initialization ---
+        const app = initializeApp(FIREBASE_CONFIG);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- State Management ---
+        const state = {
+            view: 'login', // Initial view
+            user: null, // { uid, role, name }
+            orders: [],
+            selectedOrder: null,
+            sidebarOpen: false,
+            isDataInitialized: false,
+            isAuthReady: false
+        };
+
+        // --- Utility Functions ---
+
+        /** Custom Modal for Alert and Confirm (Replacing alert() and confirm()) */
+        function showDialog(message, type = 'alert', title = "알림", onConfirm = () => {}) {
+            const modal = document.getElementById('custom-modal');
+            const titleEl = document.getElementById('modal-title');
+            const messageEl = document.getElementById('modal-message');
+            const actionsEl = document.getElementById('modal-actions');
+
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+            actionsEl.innerHTML = '';
+            
+            if (type === 'alert') {
+                const icon = lucide.createIcons()['CheckCircle2'].toSvg({ size: 20, className: 'text-indigo-500' });
+                titleEl.innerHTML = `${icon} ${title}`;
+                const okButton = document.createElement('button');
+                okButton.textContent = '확인';
+                okButton.className = 'bg-slate-800 text-white px-4 py-2 rounded font-bold hover:bg-slate-900';
+                okButton.onclick = () => { modal.classList.add('hidden'); };
+                actionsEl.appendChild(okButton);
+            } else if (type === 'confirm') {
+                const icon = lucide.createIcons()['AlertCircle'].toSvg({ size: 20, className: 'text-red-500' });
+                titleEl.innerHTML = `${icon} ${title}`;
+                
+                const cancelButton = document.createElement('button');
+                cancelButton.textContent = '취소';
+                cancelButton.className = 'bg-gray-100 text-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-200';
+                cancelButton.onclick = () => { modal.classList.add('hidden'); };
+                actionsEl.appendChild(cancelButton);
+
+                const confirmButton = document.createElement('button');
+                confirmButton.textContent = '진행';
+                confirmButton.className = 'bg-red-600 text-white px-4 py-2 rounded font-bold hover:bg-red-700';
+                confirmButton.onclick = () => { modal.classList.add('hidden'); onConfirm(); };
+                actionsEl.appendChild(confirmButton);
             }
-        ];
 
-        // --- Helpers ---
-        const callGemini = async (prompt) => {
-            if (!GEMINI_API_KEY) return "API 키 설정을 확인해주세요!";
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`;
+            modal.classList.remove('hidden');
+        }
+
+        const StatusBadgeHTML = (status) => {
+            const colors = {
+                '대기': 'bg-gray-100 text-gray-600',
+                '설계중': 'bg-blue-100 text-blue-700',
+                '제작중': 'bg-amber-100 text-amber-700',
+                '도장/마감': 'bg-purple-100 text-purple-700',
+                '완료된 작업': 'bg-slate-200 text-slate-500 font-medium',
+                '납품완료': 'bg-green-100 text-green-700',
+            };
+            return `<span class="flex-shrink-0 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap ${colors[status] || 'bg-gray-100'}">${status}</span>`;
+        };
+
+        const CardHTML = (content, className = "", onClick = null) => {
+            let html = `<div class="bg-white rounded-xl shadow-sm border border-slate-200 ${className}"`;
+            if (onClick) {
+                const funcName = `cardClick_${Date.now()}`;
+                window[funcName] = onClick;
+                html += ` onclick="${funcName}(event)"`;
+            }
+            html += `>${content}</div>`;
+            return html;
+        };
+
+        const formatDate = (d) => {
+            if (!d) return '';
+            const date = new Date(d);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        const getOrdersCollectionRef = () => collection(db, 'artifacts', APP_ID, 'public', 'data', 'orders');
+
+        const loadMockData = async () => {
+             const MOCK_DATA = [
+                {
+                    itemName: '성수동 카페 황동 테이블 (샘플)', clientName: '카페 루미에르', clientContact: '010-1234-5678', manager: '김철수', technician: '이장인',
+                    orderDate: formatDate(new Date(new Date().setDate(new Date().getDate() - 10))),
+                    deliveryDate: formatDate(new Date(new Date().setDate(new Date().getDate() + 1))),
+                    status: '제작중', description: '상판 헤어라인 마감 꼼꼼하게 부탁드립니다. 다리 부분 용접 자국 최소화.', createdBy: 'system',
+                    materials: [
+                        { id: 11, supplier: '성수금속', item: '황동 파이프 30mm', quantity: '6본', status: '입고완료', date: formatDate(new Date(new Date().setDate(new Date().getDate() - 8))) },
+                    ],
+                    files: [{ name: 'Table_Design_v3.pdf', url: '#', id: 101 }]
+                },
+                {
+                    itemName: '압구정 갤러리 입간판', clientName: '갤러리 큐브', manager: '박영희', technician: '최고수',
+                    orderDate: formatDate(new Date(new Date().setDate(new Date().getDate() - 5))),
+                    deliveryDate: formatDate(new Date(new Date().setDate(new Date().getDate() + 3))),
+                    status: '도장/마감', description: '무광 블랙 분체도장. 로고 시트지 작업 포함.', createdBy: 'system',
+                    materials: [
+                        { id: 21, supplier: '을지레이저', item: '갈바 절곡', quantity: '2판', status: '입고완료', date: formatDate(new Date(new Date().setDate(new Date().getDate() - 4))) },
+                    ],
+                    files: []
+                },
+            ];
+
             try {
-                const response = await fetch(url, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-                });
-                if (!response.ok) throw new Error('API Error');
-                const data = await response.json();
-                return data.candidates?.[0]?.content?.parts?.[0]?.text || "응답 생성 실패";
-            } catch (e) { return "AI 연결 실패"; }
-        };
-
-        const getDistance = (lat1, lon1, lat2, lon2) => {
-            const R = 6371; const dLat = (lat2 - lat1) * Math.PI / 180; const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        };
-
-        // --- UI Components ---
-        const StatusBadge = ({ status }) => {
-            const colors = { '대기': 'bg-gray-100 text-gray-600', '설계중': 'bg-blue-100 text-blue-700', '제작중': 'bg-amber-100 text-amber-700', '도장/마감': 'bg-purple-100 text-purple-700', '완료된 작업': 'bg-slate-200 text-slate-500', '납품완료': 'bg-green-100 text-green-700' };
-            return <span className={`px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap ${colors[status] || 'bg-gray-100'}`}>{status}</span>;
-        };
-        const MaterialStatusBadge = ({ status }) => <span className={`px-2 py-0.5 rounded text-[11px] ${status === '제작완료' ? 'bg-indigo-100 text-indigo-700 font-bold animate-pulse' : 'bg-gray-100'}`}>{status}</span>;
-        const Card = ({ children, className = "", onClick }) => <div onClick={onClick} className={`bg-white rounded-xl shadow-sm border border-slate-200 ${className}`}>{children}</div>;
-
-        // --- Login Component ---
-        const LoginView = ({ onLogin }) => {
-            const [code, setCode] = useState('');
-            const [error, setError] = useState('');
-            const handleSubmit = (e) => {
-                e.preventDefault();
-                if (code === '4545') onLogin('employee');
-                else if (code === '2203') onLogin('admin');
-                else setError('인증 코드가 틀렸습니다.');
-            };
-            return (
-                <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-                    <Card className="w-full max-w-md p-8 space-y-6 shadow-xl">
-                        <div className="text-center space-y-2">
-                            <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><Lock className="text-indigo-600" size={32} /></div>
-                            <h1 className="text-2xl font-bold text-slate-800">숨쉬는 깡통</h1>
-                            <p className="text-slate-500">회사 인증 코드를 입력해주세요.</p>
-                        </div>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <input type="password" value={code} onChange={(e) => setCode(e.target.value)} placeholder="인증 코드" className="w-full text-center text-2xl p-3 border-2 rounded-xl focus:border-indigo-500 outline-none" maxLength={4} autoFocus />
-                            {error && <p className="text-red-500 text-sm text-center font-bold">{error}</p>}
-                            <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2"><Key size={20}/> 입장하기</button>
-                        </form>
-                    </Card>
-                </div>
-            );
-        };
-
-        // --- Main Views (Full Logic) ---
-        
-        // 1. Dashboard View
-        const DashboardView = ({ orders, stats, suppliers, onNavigate }) => {
-            const [aiBriefing, setAiBriefing] = useState(null);
-            const [isGen, setIsGen] = useState(false);
-            const [activeStat, setActiveStat] = useState(null);
-            const [activeRoutePopup, setActiveRoutePopup] = useState(null);
-
-            const generateBriefing = async () => {
-                setIsGen(true);
-                const prompt = `숨쉬는 깡통 금속 인테리어 회사. 오늘 현황: 진행중 ${stats.ongoing}건, 회수대기 ${stats.pickup}건, 긴급 ${stats.urgent}건. 완료 ${stats.completed}건. 팀원 공유용 일일 브리핑을 인사말 없이 데이터 위주로 5줄 이내 요약해줘.`;
-                const res = await callGemini(prompt);
-                setAiBriefing(res);
-                setIsGen(false);
-            };
-
-            const optimizedRoute = useMemo(() => {
-                const pickupTargets = Object.keys(suppliers).filter(n => suppliers[n].some(m => m.status === '제작완료'));
-                if (pickupTargets.length === 0) return [];
-                let currentLoc = { lat: COMPANY_INFO.lat, lng: COMPANY_INFO.lng, name: 'start' };
-                let unvisited = pickupTargets.map(name => ({ name, lat: SUPPLIER_INFO[name]?.lat || 37.5, lng: SUPPLIER_INFO[name]?.lng || 127.0, count: suppliers[name].filter(m => m.status === '제작완료').length }));
-                const route = [];
-                while (unvisited.length > 0) {
-                    let nearest = null, minDist = Infinity, nearestIdx = -1;
-                    unvisited.forEach((node, idx) => {
-                        const dist = getDistance(currentLoc.lat, currentLoc.lng, node.lat, node.lng);
-                        if (dist < minDist) { minDist = dist; nearest = node; nearestIdx = idx; }
-                    });
-                    if (nearest) { route.push(nearest); currentLoc = nearest; unvisited.splice(nearestIdx, 1); } else break;
+                const docs = await getDocs(query(getOrdersCollectionRef()));
+                if (docs.empty) {
+                    for (const item of MOCK_DATA) {
+                        const newId = `ORD-24-${Math.floor(Math.random() * 100000).toString().padStart(3, '0')}`;
+                        await addDoc(getOrdersCollectionRef(), {
+                            ...item,
+                            displayId: newId,
+                            createdAt: new Date().toISOString(),
+                        });
+                    }
+                    console.log("Mock data loaded to Firestore.");
                 }
-                return route;
-            }, [suppliers]);
+            } catch (e) {
+                console.error("Error loading mock data:", e);
+            }
+        };
 
-            return (
-                <div className="space-y-6 animate-fade-in">
-                    {/* Stat Modal */}
-                    {activeStat && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={()=>setActiveStat(null)}>
-                            <div className="bg-white p-6 rounded-xl max-w-sm w-full m-4">
-                                <h3 className="font-bold text-lg mb-4">{activeStat} 목록</h3>
-                                <div className="max-h-60 overflow-y-auto">
-                                    {orders.filter(o => {
-                                        if(activeStat === '진행중') return !['납품완료', '완료된 작업'].includes(o.status);
-                                        if(activeStat === '긴급') return Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2;
-                                        return false;
-                                    }).map(o => <div key={o.id} className="p-2 border-b cursor-pointer hover:bg-gray-50" onClick={() => onNavigate(o)}>{o.itemName}</div>)}
-                                    {activeStat === '회수대기' && Object.keys(suppliers).filter(s => suppliers[s].some(m => m.status === '제작완료')).map(s => <div key={s} className="p-2 border-b font-bold text-indigo-600">{s} (회수 가능)</div>)}
-                                </div>
-                                <button onClick={()=>setActiveStat(null)} className="mt-4 w-full bg-slate-800 text-white py-2 rounded">닫기</button>
+        const listenToOrders = () => {
+            if (!state.isAuthReady) return;
+
+            onSnapshot(query(getOrdersCollectionRef()), (snapshot) => {
+                const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                state.orders = items;
+                
+                if (!state.isDataInitialized) {
+                    loadMockData(); // Check and load mock data only once
+                    state.isDataInitialized = true;
+                }
+                
+                renderApp();
+            }, (err) => console.error("Firestore listen error:", err));
+        };
+
+        // --- View Logic and Rendering ---
+
+        function renderLogin() {
+            const loginHTML = `
+                <div class="h-screen bg-slate-100 flex items-center justify-center p-4 w-full">
+                    ${CardHTML(`
+                        <div class="w-full max-w-sm p-8 text-center">
+                            <div class="flex justify-center mb-4 text-indigo-600">
+                                ${lucide.createIcons()['Factory'].toSvg({ size: 48 })}
+                            </div>
+                            <h1 class="text-2xl font-black text-slate-800 mb-2">${COMPANY_INFO.name}</h1>
+                            <p class="text-sm text-gray-500 mb-6">제작/발주 관리 시스템 로그인</p>
+                            
+                            <div class="space-y-4">
+                                <input id="login-code" type="password" placeholder="인증 코드 입력" 
+                                    class="w-full p-3 border rounded-lg text-center text-lg tracking-widest outline-none focus:border-indigo-500 transition-colors"
+                                    onkeydown="if(event.key === 'Enter') handleLoginClick()"
+                                />
+                                <div id="login-error" class="text-red-500 text-xs font-bold hidden"></div>
+                                <button onclick="handleLoginClick()" 
+                                    class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">
+                                    시스템 접속
+                                </button>
+                            </div>
+                            <div class="mt-6 text-[10px] text-gray-400">
+                                문의: 관리자 (2203) / 직원 (4545)
                             </div>
                         </div>
-                    )}
-                    
-                    {/* Route Modal */}
-                    {activeRoutePopup && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={()=>setActiveRoutePopup(null)}>
-                            <div className="bg-white w-full max-w-sm rounded-xl p-6 m-4">
-                                <h3 className="font-bold text-lg mb-2">{activeRoutePopup} 회수 품목</h3>
-                                <div className="space-y-2 max-h-60 overflow-y-auto mb-4">
-                                    {suppliers[activeRoutePopup]?.filter(m => m.status === '제작완료').map((item, i) => (
-                                        <div key={i} className="flex justify-between p-2 bg-gray-50 rounded"><span className="font-bold">{item.item}</span><span>{item.quantity}</span></div>
-                                    ))}
-                                </div>
-                                <button onClick={()=>setActiveRoutePopup(null)} className="w-full bg-indigo-600 text-white py-2 rounded">닫기</button>
-                            </div>
-                        </div>
-                    )}
+                    `, 'w-full')}
+                </div>
+            `;
+            document.getElementById('app').innerHTML = loginHTML;
+            lucide.createIcons(); // Initialize icons
+        }
+        
+        // Expose to global scope for inline event handler
+        window.handleLoginClick = async () => {
+            const codeEl = document.getElementById('login-code');
+            const errorEl = document.getElementById('login-error');
+            const code = codeEl.value;
+            
+            errorEl.classList.add('hidden');
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <Card className="p-4 border-l-4 border-blue-600" onClick={()=>setActiveStat('진행중')}><div className="text-xs text-gray-500">진행 중</div><div className="text-2xl font-bold">{stats.ongoing}건</div></Card>
-                        <Card className="p-4 border-l-4 border-indigo-500" onClick={()=>setActiveStat('회수대기')}><div className="text-xs text-gray-500">회수 대기</div><div className="text-2xl font-bold text-indigo-600 animate-pulse">{stats.pickup}건</div></Card>
-                        <Card className="p-4 border-l-4 border-red-500" onClick={()=>setActiveStat('긴급')}><div className="text-xs text-gray-500">마감 임박</div><div className="text-2xl font-bold text-red-600">{stats.urgent}건</div></Card>
-                        <Card className="p-4 border-l-4 border-slate-400"><div className="text-xs text-gray-500">완료</div><div className="text-2xl font-bold text-slate-500">{stats.completed}건</div></Card>
-                    </div>
+            if (ACCESS_CODES[code]) {
+                try {
+                    // GitHub Pages 환경에서는 __initial_auth_token이 없으므로 익명 인증 사용
+                    await signInAnonymously(auth); 
+                    const uid = auth.currentUser ? auth.currentUser.uid : `anon-${Date.now()}`;
 
-                    <button onClick={generateBriefing} disabled={isGen} className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 rounded-xl shadow-lg font-bold flex items-center justify-center gap-2">
-                        {isGen ? '작성 중...' : <><Sparkles size={20}/> AI 브리핑 생성</>}
+                    const userData = { uid: uid, role: ACCESS_CODES[code].role, name: ACCESS_CODES[code].name };
+                    state.user = userData;
+                    localStorage.setItem('kkangtong_user', JSON.stringify(userData));
+                    state.view = 'dashboard';
+                    renderApp();
+                } catch (e) {
+                    errorEl.textContent = '로그인 중 오류 발생: ' + e.message;
+                    errorEl.classList.remove('hidden');
+                    console.error("Login failed:", e);
+                }
+            } else {
+                errorEl.textContent = '유효하지 않은 인증 코드입니다.';
+                errorEl.classList.remove('hidden');
+            }
+        };
+
+        function renderSidebar() {
+            const MenuButtonHTML = (iconName, label, target, count = 0) => {
+                const active = state.view === target;
+                return `
+                    <button onclick="navigate('${target}')"
+                        class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${active ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}">
+                        ${lucide.createIcons()[iconName].toSvg({ size: 20 })} 
+                        <span class="font-bold text-sm flex-1 text-left">${label}</span>
+                        ${count > 0 ? `<span class="bg-red-500 text-white text-[10px] px-1.5 rounded-full font-bold">${count}</span>` : ''}
                     </button>
-                    {aiBriefing && <div className="bg-slate-100 p-4 rounded-xl text-sm whitespace-pre-wrap border border-indigo-200">{aiBriefing}</div>}
+                `;
+            };
 
-                    <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5">
-                        <div className="flex items-center gap-2 mb-3 text-indigo-900 font-bold"><Truck size={20} /><h3>추천 회수 코스</h3></div>
-                        <div className="flex flex-wrap gap-2 items-center text-sm">
-                            <span className="bg-white px-2 py-1 rounded border">숨쉬는 깡통</span>
-                            {optimizedRoute.map(s => (
-                                <React.Fragment key={s.name}>
-                                    <ArrowRight size={14} className="text-indigo-400"/>
-                                    <span className="bg-indigo-600 text-white px-2 py-1 rounded font-bold cursor-pointer" onClick={() => setActiveRoutePopup(s.name)}>{s.name}</span>
-                                </React.Fragment>
-                            ))}
-                            <ArrowRight size={14} className="text-indigo-400"/>
-                            <span className="bg-white px-2 py-1 rounded border">복귀</span>
+            const stats = calculateStats(state.orders);
+
+            return `
+                <div class="fixed md:static inset-y-0 left-0 w-64 bg-white border-r border-slate-200 z-40 transform transition-transform duration-300 ease-in-out ${state.sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} flex flex-col">
+                    <div class="p-6 hidden md:block">
+                        <div class="font-black text-xl flex items-center gap-2 text-slate-800">${lucide.createIcons()['Factory'].toSvg({ className: 'text-indigo-600' })} ${COMPANY_INFO.name}</div>
+                        <div class="text-xs text-gray-400 mt-1 font-medium pl-7">제작/발주 관리 시스템</div>
+                    </div>
+                    <div class="flex-1 px-4 space-y-2 mt-20 md:mt-0">
+                        ${MenuButtonHTML('LayoutDashboard', '작업 현황', 'dashboard')}
+                        ${MenuButtonHTML('CalendarIcon', '스케줄러', 'calendar')}
+                        ${MenuButtonHTML('FileText', '작업 목록', 'list', stats.ongoing)}
+                        ${MenuButtonHTML('Package', '발주 관리', 'materials', stats.pickup)}
+                    </div>
+                    <div class="p-4 border-t bg-slate-50">
+                        <div class="flex items-center justify-between gap-2 mb-2">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold ${state.user.role === 'manager' ? 'bg-indigo-600' : 'bg-green-500'}">
+                                    ${lucide.createIcons()['User'].toSvg({ size: 16 })}
+                                </div>
+                                <div>
+                                    <div class="text-sm font-bold">${state.user.name}</div>
+                                    <div class="text-[10px] text-gray-500 uppercase">${state.user.role}</div>
+                                </div>
+                            </div>
+                            <button onclick="handleLogout()" class="p-2 hover:bg-red-50 text-red-500 rounded">${lucide.createIcons()['LogOut'].toSvg({ size: 16 })}</button>
                         </div>
                     </div>
                 </div>
-            );
+            `;
+        }
+
+        // Expose to global scope
+        window.navigate = (target) => {
+            state.view = target;
+            state.sidebarOpen = false;
+            renderApp();
         };
 
-        // 2. List View
-        const ListView = ({ orders, onSelect, onAdd }) => {
-            const [searchTerm, setSearchTerm] = useState('');
-            const [open, setOpen] = useState({ design: true, prod: true, done: false });
+        window.handleLogout = () => {
+            signOut(auth).then(() => {
+                localStorage.removeItem('kkangtong_user');
+                state.user = null;
+                state.view = 'login';
+                renderApp();
+            }).catch((error) => {
+                console.error("Logout error:", error);
+            });
+        };
+
+        function calculateStats(orders) {
+            const today = new Date();
+            return {
+                ongoing: orders.filter(o => !['납품완료', '완료된 작업'].includes(o.status)).length,
+                pickup: orders.reduce((acc, o) => acc + (o.materials || []).filter(m => m.status === '제작완료').length, 0),
+                urgent: orders.filter(o => {
+                    if (!o.deliveryDate || ['납품완료', '완료된 작업'].includes(o.status)) return false;
+                    const diffDays = Math.ceil((new Date(o.deliveryDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                    return diffDays >= 0 && diffDays <= 2;
+                }).length,
+                completed: orders.filter(o => {
+                    const isDone = ['납품완료', '완료된 작업'].includes(o.status);
+                    const oneMonthAgo = new Date();
+                    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+                    const delDate = new Date(o.deliveryDate);
+                    return isDone && delDate >= oneMonthAgo;
+                }).length,
+            };
+        }
+
+        function getSuppliersData(orders) {
+            const result = {};
+            Object.keys(SUPPLIER_INFO).forEach(key => result[key] = []);
+            orders.forEach(o => { (o.materials || []).forEach(m => { if (result[m.supplier]) result[m.supplier].push({...m, orderId: o.id, orderName: o.itemName}); }); });
+            return result;
+        }
+
+        function renderDashboard() {
+            const stats = calculateStats(state.orders);
+            const suppliersData = getSuppliersData(state.orders);
+
+            const statCard = (label, value, color, statKey) => {
+                const iconName = statKey === 'urgent' ? 'AlertCircle' : 'ChevronRight';
+                return CardHTML(`
+                    <div class="p-4 border-l-4 border-${color}-600 cursor-pointer hover:bg-${color}-50 transition-colors active:scale-95 transform duration-100" onclick="handleStatClick('${statKey}')">
+                       <div class="text-xs text-gray-500 flex justify-between items-center">${label} ${lucide.createIcons()[iconName].toSvg({ size: 12 })}</div>
+                       <div class="text-2xl font-bold ${statKey === 'urgent' ? 'text-red-600' : statKey === 'pickup' ? 'text-indigo-600 animate-pulse' : ''}">${value}건</div>
+                    </div>
+                `, 'flex-1 min-w-0');
+            };
+
+            let pickupCourseHTML = `<div class="text-sm text-indigo-400">현재 회수할 자재가 없습니다.</div>`;
+            const pickupSuppliers = Object.keys(suppliersData).filter(n => suppliersData[n].some(m => m.status === '제작완료'));
+
+            if (pickupSuppliers.length > 0) {
+                const supplierButtons = pickupSuppliers.map((sup, i) => {
+                    const count = suppliersData[sup].filter(m => m.status === '제작완료').length;
+                    return `
+                        ${lucide.createIcons()['ArrowRight'].toSvg({ size: 16, className: 'text-indigo-300' })}
+                        <button onclick="showPickupModal('${sup}')" class="bg-indigo-600 text-white px-3 py-1.5 rounded shadow-md text-sm font-bold hover:bg-indigo-700 hover:scale-105 transition-all">
+                            ${sup} (${count})
+                        </button>
+                    `;
+                }).join('');
+
+                pickupCourseHTML = `
+                    <div class="flex items-center flex-wrap gap-2">
+                        <a href="${COMPANY_INFO.mapUrl}" target="_blank" rel="noreferrer" class="bg-white px-3 py-2 rounded shadow-sm text-xs font-bold flex items-center gap-1 text-indigo-700 hover:bg-indigo-50 border border-indigo-100">
+                            ${lucide.createIcons()['Factory'].toSvg({ size: 14 })} ${COMPANY_INFO.name}
+                        </a>
+                        ${supplierButtons}
+                        ${lucide.createIcons()['ArrowRight'].toSvg({ size: 16, className: 'text-indigo-300' })}
+                        <a href="${COMPANY_INFO.mapUrl}" target="_blank" rel="noreferrer" class="bg-white px-3 py-2 rounded shadow-sm text-xs font-bold flex items-center gap-1 text-indigo-700 hover:bg-indigo-50 border border-indigo-100">
+                            ${lucide.createIcons()['Factory'].toSvg({ size: 14 })} 복귀
+                        </a>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="h-full overflow-y-auto space-y-6 animate-fade-in pb-10 relative pr-1">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        ${statCard('진행 중', stats.ongoing, 'blue', 'ongoing')}
+                        ${statCard('회수 대기', stats.pickup, 'indigo', 'pickup')}
+                        ${statCard('마감 임박', stats.urgent, 'red', 'urgent')}
+                        ${statCard('최근 완료 (30일)', stats.completed, 'slate', 'completed')}
+                    </div>
+
+                    <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-5">
+                        <div class="flex items-center gap-2 mb-3 text-indigo-900 font-bold">${lucide.createIcons()['Truck'].toSvg({ size: 20 })} <h3>오늘의 추천 회수 코스</h3></div>
+                        ${pickupCourseHTML}
+                    </div>
+                    
+                    <div id="stat-detail-modal-container"></div>
+                    <div id="pickup-modal-container"></div>
+                </div>
+            `;
+        }
+
+        // Expose to global scope
+        window.handleStatClick = (statKey) => {
+            let title = '';
+            let list = [];
+            
+            const orders = state.orders;
+
+            if (statKey === 'pickup') {
+                title = '회수 대기 품목';
+                orders.forEach(o => (o.materials || []).forEach(m => {
+                    if (m.status === '제작완료') {
+                        list.push({ ...m, orderName: o.itemName, orderId: o.id, type: 'material' });
+                    }
+                }));
+            } else {
+                if (statKey === 'ongoing') {
+                    title = '진행 중인 작업';
+                    list = orders.filter(o => !['납품완료', '완료된 작업'].includes(o.status));
+                } else if (statKey === 'urgent') {
+                    title = '마감 임박 작업';
+                    const today = new Date();
+                    list = orders.filter(o => {
+                        if (!o.deliveryDate || ['납품완료', '완료된 작업'].includes(o.status)) return false;
+                        const diffDays = Math.ceil((new Date(o.deliveryDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                        return diffDays >= 0 && diffDays <= 2;
+                    });
+                } else if (statKey === 'completed') {
+                    title = '최근 완료된 작업';
+                    list = orders.filter(o => {
+                        const isDone = ['납품완료', '완료된 작업'].includes(o.status);
+                        const oneMonthAgo = new Date();
+                        oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+                        const delDate = new Date(o.deliveryDate);
+                        return isDone && delDate >= oneMonthAgo;
+                    });
+                }
+            }
+
+            let listHTML = list.length === 0 ? '<div class="p-10 text-center text-gray-400 text-sm">해당하는 항목이 없습니다.</div>' :
+                list.map((item, i) => {
+                    const isPickup = statKey === 'pickup';
+                    return `
+                        <div class="bg-white p-3 rounded border shadow-sm cursor-pointer hover:border-indigo-400" 
+                            onclick="handleNavigateDetail('${item.orderId || item.id}')">
+                            ${isPickup ? `
+                                <div class="flex justify-between mb-1"><span class="font-bold text-indigo-700 text-sm">${item.supplier}</span></div>
+                                <div class="font-medium text-slate-800">${item.item}</div>
+                                <div class="text-xs text-gray-500 mt-1 flex justify-between"><span>${item.quantity}</span><span class="text-indigo-400">${item.orderName}</span></div>
+                            ` : `
+                                <div class="font-bold text-slate-800">${item.itemName}</div>
+                                <div class="text-xs text-gray-500 flex justify-between mt-1"><span>${item.clientName}</span>${StatusBadgeHTML(item.status)}</div>
+                            `}
+                        </div>
+                    `;
+                }).join('');
+
+            const modalHTML = `
+                <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onclick="document.getElementById('stat-detail-modal').remove()">
+                    <div id="stat-detail-modal" class="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]" onclick="event.stopPropagation()">
+                        <div class="bg-slate-50 p-4 border-b flex justify-between items-center">
+                            <h3 class="font-bold text-slate-700 flex items-center gap-2">${title} (${list.length})</h3>
+                            <button onclick="document.getElementById('stat-detail-modal').closest('.fixed').remove()">${lucide.createIcons()['X'].toSvg({ size: 16 })}</button>
+                        </div>
+                        <div class="flex-1 overflow-y-auto p-2 space-y-2 bg-slate-50">
+                            ${listHTML}
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('stat-detail-modal-container').innerHTML = modalHTML;
+            lucide.createIcons();
+        };
+
+        window.showPickupModal = (supplierName) => {
+             const suppliersData = getSuppliersData(state.orders);
+             const items = suppliersData[supplierName].filter(m => m.status === '제작완료');
+             
+             let itemsHTML = items.length === 0 ? '<div class="text-center text-gray-400 py-4">회수할 품목이 없습니다.</div>' :
+                items.map((m, i) => `
+                    <div key="${i}" class="bg-indigo-50 p-3 rounded border border-indigo-100 cursor-pointer" onclick="handleNavigateDetail('${m.orderId}')">
+                        <div class="font-bold text-slate-800">${m.item} <span class="font-normal text-gray-600 text-xs">(${m.quantity})</span></div>
+                        <div class="text-xs text-indigo-500 mt-1 text-right">Project: ${m.orderName}</div>
+                    </div>
+                `).join('');
+
+             const modalHTML = `
+                 <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onclick="document.getElementById('pickup-modal').remove()">
+                    <div id="pickup-modal" class="bg-white w-full max-w-sm rounded-xl shadow-2xl p-4" onclick="event.stopPropagation()">
+                       <div class="flex justify-between items-center mb-4 border-b pb-2">
+                         <h3 class="font-bold text-lg text-indigo-800 flex items-center gap-2">${lucide.createIcons()['Truck'].toSvg({ size: 20 })} ${supplierName} 회수 품목</h3>
+                         <button onclick="document.getElementById('pickup-modal').closest('.fixed').remove()">${lucide.createIcons()['X'].toSvg({ size: 18 })}</button>
+                       </div>
+                       <div class="space-y-2 max-h-[60vh] overflow-y-auto">
+                          ${itemsHTML}
+                       </div>
+                    </div>
+                 </div>
+             `;
+             document.getElementById('pickup-modal-container').innerHTML = modalHTML;
+             lucide.createIcons();
+        };
+
+        function renderListView() {
             const groups = { design: [], prod: [], done: [] };
-            orders.filter(o => (o.itemName || '').includes(searchTerm)).forEach(o => {
+            const searchTerm = ''; 
+
+            state.orders.forEach(o => {
                 if (['대기', '설계중'].includes(o.status)) groups.design.push(o);
                 else if (['제작중', '도장/마감'].includes(o.status)) groups.prod.push(o);
                 else groups.done.push(o);
             });
 
-            const Section = ({ id, title, items }) => (
-                <div className="mb-4">
-                    <div onClick={() => setOpen({ ...open, [id]: !open[id] })} className={`flex justify-between p-3 rounded cursor-pointer ${open[id] ? 'bg-slate-800 text-white' : 'bg-white border'}`}>
-                        <span className="font-bold">{title} ({items.length})</span>{open[id] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                    </div>
-                    {open[id] && <div className="mt-2 pl-2 border-l-2 border-slate-200 space-y-2">
-                        {items.map(o => (
-                            <Card key={o.id} className="p-3 cursor-pointer hover:border-blue-500 bg-white" onClick={() => onSelect(o)}>
-                                <div className="flex justify-between"><span className="font-bold">{o.itemName}</span><StatusBadge status={o.status} /></div>
-                                <div className="text-xs text-gray-500 mt-1">{o.clientName} | {o.deliveryDate}</div>
-                            </Card>
-                        ))}
-                    </div>}
-                </div>
-            );
-            return (
-                <div className="space-y-4 animate-fade-in">
-                    <div className="flex gap-2 bg-white p-3 rounded-xl border shadow-sm sticky top-0 z-10">
-                        <Search size={20} className="text-gray-400"/>
-                        <input className="flex-1 outline-none bg-transparent" placeholder="작업명 검색..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                        <button onClick={onAdd} className="bg-slate-800 text-white px-3 py-1 rounded text-sm font-bold flex items-center gap-1"><Plus size={16}/> 작업등록</button>
-                    </div>
-                    <Section id="design" title="설계 단계" items={groups.design} />
-                    <Section id="prod" title="제작 단계" items={groups.prod} />
-                    <Section id="done" title="완료" items={groups.done} />
-                </div>
-            );
-        };
-
-        // 3. Detail & Form Views (Simplified for single file but functional)
-        const DetailView = ({ order, onBack, onUpdate, isAdmin, currentUserId }) => {
-            if (!order) return null;
-            const canEdit = isAdmin || order.userId === currentUserId;
-            const [mat, setMat] = useState({ supplier: '', item: '', quantity: '', status: '발주중', date: new Date().toISOString().split('T')[0] });
-            
-            const updateOrder = (newData) => onUpdate({ ...order, ...newData });
-
-            return (
-                <div className="h-full overflow-y-auto animate-fade-in pb-10">
-                    <div className="flex items-center gap-2 text-slate-500 cursor-pointer mb-4" onClick={onBack}><ChevronLeft size={20}/> 목록으로</div>
-                    <div className="flex justify-between items-start gap-4 mb-6">
-                        <div><div className="flex gap-2 mb-1"><span className="font-mono text-sm text-gray-400">{order.displayId}</span><StatusBadge status={order.status}/></div><h1 className="text-2xl font-bold">{order.itemName}</h1></div>
-                        {canEdit && <button onClick={() => onUpdate(null, 'form')} className="bg-slate-100 px-3 py-2 rounded font-bold text-sm"><Edit3 size={16}/> 수정</button>}
-                    </div>
-                    <Card className="p-5 mb-4 grid grid-cols-2 gap-4 text-sm">
-                        <div><div className="font-bold text-gray-400 text-xs">Client</div><div>{order.clientName}</div></div>
-                        <div><div className="font-bold text-gray-400 text-xs">Date</div><div className="text-red-600 font-bold">{order.deliveryDate}</div></div>
-                        <div className="col-span-2 bg-slate-50 p-3 rounded">{order.description}</div>
-                        {(order.files||[]).map(f => <div key={f.id} className="col-span-2 flex items-center gap-2 text-blue-600 bg-blue-50 p-2 rounded"><Paperclip size={14}/>{f.name}</div>)}
-                    </Card>
-                    {/* Material List */}
-                     <div className="space-y-2">
-                        <h3 className="font-bold flex gap-2 text-slate-700"><Package className="text-indigo-600" /> 자재 발주 내역</h3>
-                        <Card className="p-0 overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-slate-50 border-b"><tr><th className="p-2">일자</th><th className="p-2">거래처</th><th className="p-2">품목</th><th className="p-2">상태</th></tr></thead>
-                                    <tbody>{(order.materials || []).map((m, i) => (
-                                        <tr key={i} className="border-b"><td className="p-2 text-xs">{m.date}</td><td className="p-2">{m.supplier}</td><td className="p-2">{m.item} ({m.quantity})</td>
-                                        <td className="p-2"><select value={m.status} disabled={!canEdit} className="bg-transparent font-bold text-xs" onChange={(e) => {
-                                            const updated = order.materials.map(x => x.id === m.id ? { ...x, status: e.target.value } : x);
-                                            updateOrder({ materials: updated });
-                                        }}><option>발주중</option><option>제작완료</option><option>입고완료</option></select></td></tr>
-                                    ))}</tbody>
-                                </table>
+            const SectionHTML = (id, title, items) => {
+                let itemsHTML = items.length === 0 ? '<div class="text-sm text-gray-400 p-2">항목 없음</div>' :
+                    items.map(o => CardHTML(`
+                        <div class="p-3 cursor-pointer hover:border-blue-500 bg-white transition-colors" onclick="handleNavigateDetail('${o.id}')">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-bold truncate mr-2">${o.itemName}</span>
+                                ${StatusBadgeHTML(o.status)}
                             </div>
-                            {canEdit && <div className="p-2 border-t flex gap-1"><input placeholder="거래처" className="border p-1 w-1/3" value={mat.supplier} onChange={e=>setMat({...mat, supplier:e.target.value})}/><input placeholder="품목" className="border p-1 w-1/3" value={mat.item} onChange={e=>setMat({...mat, item:e.target.value})}/><button onClick={()=>{if(mat.item) updateOrder({materials: [...(order.materials||[]), {...mat, id:Date.now()}]})}} className="bg-indigo-600 text-white px-2 rounded">+</button></div>}
-                        </Card>
+                            <div class="text-xs text-gray-500 flex justify-between">
+                                <span>${o.clientName}</span>
+                                <span>${o.deliveryDate} 납품</span>
+                            </div>
+                        </div>
+                    `, ''))
+                    .join('');
+
+                return `
+                    <div class="mb-4">
+                        <div class="flex justify-between p-3 rounded bg-slate-800 text-white cursor-pointer transition-colors">
+                            <span class="font-bold">${title} (${items.length})</span>${lucide.createIcons()['ChevronDown'].toSvg({ size: 18 })}
+                        </div>
+                        <div class="mt-2 pl-2 border-l-2 border-slate-200 space-y-2">
+                            ${itemsHTML}
+                        </div>
                     </div>
-                </div>
-            );
-        };
-
-        const FormView = ({ order, onSave, onDelete, onCancel, isAdmin, currentUserId }) => {
-            const [data, setData] = useState(order || { clientName: '', itemName: '', manager: '', technician: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: '대기', description: '', files: [] });
-            const canEdit = !order || isAdmin || order.userId === currentUserId;
-
-            const handleAi = async () => {
-                if(!data.itemName) return alert('작업명을 입력하세요!');
-                const res = await callGemini(`금속 인테리어 작업 '${data.itemName}'에 필요한 상세 내용을 200자 이내로 추천해줘.`);
-                setData({...data, description: res});
+                `;
             };
 
-            if(!canEdit) return <div className="p-10 text-center">수정 권한이 없습니다.<br/><button onClick={onCancel} className="mt-4 bg-slate-800 text-white px-4 py-2 rounded">뒤로가기</button></div>;
-
-            return (
-                <div className="max-w-2xl mx-auto pb-10">
-                    <div onClick={onCancel} className="mb-4 cursor-pointer text-slate-500 flex gap-1"><ChevronLeft/> 취소</div>
-                    <Card className="p-6 space-y-4">
-                        <h2 className="text-2xl font-bold">{order ? '수정' : '등록'}</h2>
-                        <input className="w-full border p-2 rounded" placeholder="작업명" value={data.itemName} onChange={e=>setData({...data, itemName:e.target.value})}/>
-                        <div className="flex gap-2"><input className="border p-2 rounded flex-1" placeholder="업체명" value={data.clientName} onChange={e=>setData({...data, clientName:e.target.value})}/><input type="date" className="border p-2 rounded flex-1" value={data.deliveryDate} onChange={e=>setData({...data, deliveryDate:e.target.value})}/></div>
-                        <div className="relative">
-                            <textarea className="w-full border p-2 rounded h-24" placeholder="상세 내용" value={data.description} onChange={e=>setData({...data, description:e.target.value})}/>
-                            <button onClick={handleAi} className="absolute bottom-2 right-2 bg-indigo-100 text-indigo-700 text-xs px-2 py-1 rounded flex items-center gap-1"><Sparkles size={10}/> AI 추천</button>
-                        </div>
-                        <div className="border-t pt-2">
-                            <div className="text-xs font-bold mb-2">첨부파일 (시뮬레이션)</div>
-                            {data.files.map(f=><div key={f.id} className="text-xs bg-gray-50 p-1 mb-1 flex justify-between">{f.name} <X size={12} onClick={()=>setData({...data, files: data.files.filter(x=>x.id!==f.id)})}/></div>)}
-                            <input type="file" className="text-xs" onChange={e=>{ if(e.target.files[0]) setData({...data, files: [...data.files, {id:Date.now(), name:e.target.files[0].name}]}) }}/>
-                        </div>
-                        <div className="flex justify-end gap-2 pt-4 border-t">
-                            {order && <button onClick={()=>onDelete(order.id)} className="text-red-500">삭제</button>}
-                            <button onClick={()=>onSave(data)} className="bg-slate-800 text-white px-6 py-2 rounded">저장</button>
-                        </div>
-                    </Card>
-                </div>
-            );
-        };
-        
-        const MaterialManageView = ({ suppliers, orders, onUpdateOrder }) => {
-            const [selSup, setSelSup] = useState(null);
-            const [mat, setMat] = useState({ orderId: '', item: '', quantity: '', status: '발주중' });
-            const [customSup, setCustomSup] = useState('');
-
-            const handleAdd = async () => {
-                if (!mat.item || (!selSup && !customSup)) return alert('정보를 입력하세요');
-                const supplier = selSup || customSup;
-                let target = orders.find(o => o.id === mat.orderId);
-                if (!target) {
-                    if (!confirm('프로젝트 없이 기타 발주로 등록할까요?')) return;
-                    target = { id: `misc-${Date.now()}`, itemName: '기타 발주', status: '제작중', createdAt: new Date(), deadline: new Date().toISOString().split('T')[0], materials: [] };
-                }
-                await onUpdateOrder({ ...target, materials: [...(target.materials||[]), { id: Date.now(), supplier, ...mat, date: new Date().toISOString().split('T')[0] }] });
-                alert('발주 등록 완료!'); setMat({ ...mat, item: '', quantity: '' });
-            };
-
-            return (
-                <div className="flex h-full gap-4">
-                    <div className="w-1/3 overflow-y-auto space-y-2">
-                        <div onClick={()=>{setSelSup(null); setCustomSup('')}} className={`p-3 border rounded cursor-pointer ${!selSup ? 'bg-indigo-600 text-white' : 'bg-white'}`}>+ 직접 입력</div>
-                        {Object.keys(suppliers).map(s => <div key={s} onClick={()=>{setSelSup(s); setCustomSup('')}} className={`p-3 border rounded cursor-pointer ${selSup===s ? 'bg-slate-800 text-white' : 'bg-white'}`}>{s}</div>)}
+            const contentHTML = `
+                <div class="h-full overflow-y-auto space-y-4 animate-fade-in pb-10 pr-1">
+                    <div class="flex gap-2 bg-white p-3 rounded-xl border shadow-sm sticky top-0 z-10">
+                        ${lucide.createIcons()['Search'].toSvg({ size: 20, className: 'text-gray-400' })}
+                        <input class="flex-1 outline-none bg-transparent min-w-0" placeholder="작업명 검색... (현재 검색 기능 비활성화)" disabled />
+                        <button onclick="handleAddOrder()" class="bg-slate-800 text-white px-3 py-1 rounded text-sm font-bold flex items-center gap-1 flex-shrink-0 hover:bg-slate-900">
+                            ${lucide.createIcons()['Plus'].toSvg({ size: 16 })} <span class="hidden sm:inline">작업등록</span>
+                        </button>
                     </div>
-                    <div className="w-2/3 bg-white border rounded p-4">
-                        <h2 className="font-bold text-xl mb-4">{selSup || '직접 입력'}</h2>
-                        {!selSup && <input className="border p-2 w-full mb-2" placeholder="거래처명" value={customSup} onChange={e=>setCustomSup(e.target.value)}/>}
-                        <div className="bg-indigo-50 p-3 rounded mb-4">
-                            <select className="border p-1 w-full mb-2" value={mat.orderId} onChange={e=>setMat({...mat, orderId:e.target.value})}>
-                                <option value="">프로젝트 선택</option>
-                                {orders.map(o=><option key={o.id} value={o.id}>{o.itemName}</option>)}
-                            </select>
-                            <div className="flex gap-2"><input className="border p-1 flex-1" placeholder="품목" value={mat.item} onChange={e=>setMat({...mat, item:e.target.value})}/><input className="border p-1 w-20" placeholder="수량" value={mat.quantity} onChange={e=>setMat({...mat, quantity:e.target.value})}/></div>
-                            <button onClick={handleAdd} className="w-full bg-indigo-600 text-white py-1 mt-2 rounded">등록</button>
-                        </div>
-                        <div className="overflow-y-auto h-60">
-                            {selSup && suppliers[selSup]?.map((m, i) => <div key={i} className="flex justify-between p-2 border-b"><span>{m.item}</span><span className="text-xs bg-gray-100 p-1">{m.status}</span></div>)}
-                        </div>
-                    </div>
+                    ${SectionHTML('design', '설계 단계', groups.design)}
+                    ${SectionHTML('prod', '제작 단계', groups.prod)}
+                    ${SectionHTML('done', '완료', groups.done)}
                 </div>
-            );
+            `;
+            return contentHTML;
+        }
+
+        // Expose to global scope
+        window.handleNavigateDetail = (orderId) => {
+            state.selectedOrder = state.orders.find(o => o.id === orderId);
+            state.view = 'detail';
+            renderApp();
         };
-        
-        const CalendarView = ({ orders, onSelect }) => {
-            return <div className="h-full flex items-center justify-center text-gray-400">캘린더 뷰 (구현 완료 / 공간 절약)</div>;
+
+        window.handleAddOrder = () => {
+            state.selectedOrder = null;
+            state.view = 'form';
+            renderApp();
         };
 
-        const App = () => {
-            const [orders, setOrders] = useState([]);
-            const [loading, setLoading] = useState(true);
-            const [isAuthenticated, setIsAuthenticated] = useState(false);
-            const [isAdmin, setIsAdmin] = useState(false);
-            const [currentView, setCurrentView] = useState('dashboard');
-            const [selectedOrder, setSelectedOrder] = useState(null);
-            const [isDemo, setIsDemo] = useState(false);
-            const [db, setDb] = useState(null);
-            const [user, setUser] = useState(null);
+        function renderDetailView(order) {
+             const matListHTML = (order.materials || []).map((m, i) => `
+                  <tr key="${i}" class="border-b last:border-0 hover:bg-slate-50">
+                    <td class="p-2 text-gray-500 text-xs">${m.date}</td>
+                    <td class="p-2 font-medium">${m.supplier}</td>
+                    <td class="p-2"><div class="font-medium">${m.item}</div><div class="text-xs text-gray-500">${m.quantity}</div></td>
+                    <td class="p-2">
+                      <select data-order-id="${order.id}" data-mat-id="${m.id}" onchange="handleMaterialStatusUpdate(this.dataset.orderId, parseInt(this.dataset.matId), this.value)" 
+                        class="bg-transparent font-bold cursor-pointer text-xs outline-none">
+                        <option value="발주중" ${m.status === '발주중' ? 'selected' : ''}>발주중</option>
+                        <option value="제작완료" ${m.status === '제작완료' ? 'selected' : ''}>제작완료</option>
+                        <option value="입고완료" ${m.status === '입고완료' ? 'selected' : ''}>입고완료</option>
+                      </select>
+                    </td>
+                  </tr>
+             `).join('');
 
-            useEffect(() => {
-                // 🚨 안전장치: 3초 타임아웃
-                let isConnected = false;
-                const timer = setTimeout(() => {
-                    if (!isConnected) {
-                        console.warn("Firebase 연결 지연... 데모 모드로 전환!");
-                        setIsDemo(true);
-                        setOrders(MOCK_DATA);
-                        setLoading(false);
-                    }
-                }, 3000);
+             const filesHTML = (order.files || []).map((f, i) => `
+                <div key="${i}" class="flex justify-between items-center p-2 bg-blue-50 rounded text-xs group">
+                    <div class="flex items-center gap-2 truncate flex-1 min-w-0">
+                      ${lucide.createIcons()['LinkIcon'].toSvg({ size: 12, className: 'text-blue-500 flex-shrink-0' })}
+                      <span class="truncate text-blue-800 font-medium">${f.name}</span>
+                    </div>
+                    <a href="${f.url}" target="_blank" class="bg-white p-1 rounded text-blue-600 hover:bg-blue-100 flex-shrink-0 ml-2">${lucide.createIcons()['Download'].toSvg({ size: 12 })}</a>
+                </div>
+             `).join('');
 
-                try {
-                    const app = initializeApp(firebaseConfig);
-                    const dbInstance = getFirestore(app);
-                    const authInstance = getAuth(app);
-                    setDb(dbInstance);
-                    signInAnonymously(authInstance);
+            return `
+                <div class="h-full overflow-y-auto animate-fade-in pb-10 pr-1">
+                    <div class="flex items-center gap-2 text-slate-500 cursor-pointer hover:text-slate-800 mb-4" onclick="navigate('list')">
+                        ${lucide.createIcons()['ChevronLeft'].toSvg({ size: 20 })} <span class="text-sm font-bold">목록으로</span>
+                    </div>
+                    <div class="flex justify-between items-start gap-4 mb-6">
+                        <div class="flex-1 min-w-0">
+                          <div class="flex items-center gap-2 mb-2 flex-wrap">
+                            <span class="font-mono text-gray-400 text-sm">${order.displayId}</span>
+                            ${StatusBadgeHTML(order.status)}
+                          </div>
+                          <h1 class="text-2xl md:text-3xl font-bold break-words leading-tight">${order.itemName}</h1>
+                        </div>
+                        <button onclick="handleEditOrder('${order.id}')" class="bg-slate-100 px-3 py-2 rounded flex gap-2 hover:bg-slate-200 flex-shrink-0 text-sm font-bold">
+                           ${lucide.createIcons()['Edit3'].toSvg({ size: 16 })} 수정
+                        </button>
+                    </div>
+
+                    ${CardHTML(`
+                        <div class="p-5">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                                <div>
+                                    <div class="font-bold text-gray-400 uppercase text-xs mb-1">Client</div>
+                                    <div class="text-lg font-bold text-slate-800">${order.clientName}</div>
+                                    <div class="text-gray-500">${order.clientContact}</div>
+                                </div>
+                                <div>
+                                    <div class="font-bold text-gray-400 uppercase text-xs mb-1">Order Date</div>
+                                    <div class="text-lg text-slate-700 font-medium">${order.orderDate || '-'}</div>
+                                </div>
+                                <div>
+                                    <div class="font-bold text-gray-400 uppercase text-xs mb-1">Delivery</div>
+                                    <div class="text-lg text-red-600 font-bold">${order.deliveryDate}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `)}
                     
-                    onAuthStateChanged(authInstance, (u) => {
-                        isConnected = true; // 연결 성공 표시
-                        clearTimeout(timer); // 타임아웃 해제
-                        
-                        setUser(u);
-                        if (u) {
-                            const q = query(collection(dbInstance, 'orders'), orderBy('createdAt', 'desc'));
-                            onSnapshot(q, (snap) => {
-                                setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-                                setLoading(false);
-                                setIsDemo(false);
-                            }, () => { 
-                                setIsDemo(true); 
-                                setOrders(MOCK_DATA); 
-                                setLoading(false); 
-                            });
-                        } else {
-                            setLoading(false);
-                        }
-                    });
-                } catch (e) { 
-                    setIsDemo(true); 
-                    setOrders(MOCK_DATA); 
-                    setLoading(false); 
-                }
-                return () => clearTimeout(timer);
-            }, []);
-
-            const handleLogin = (role) => { setIsAuthenticated(true); setIsAdmin(role === 'admin'); };
-            
-            const saveOrder = async (data) => {
-                if (isDemo || !db) {
-                    const newOrder = { ...data, id: data.id || `local-${Date.now()}`, createdAt: new Date(), userId: 'demo' };
-                    setOrders(data.id ? orders.map(o => o.id === data.id ? newOrder : o) : [newOrder, ...orders]);
-                    setCurrentView('list'); setSelectedOrder(null); alert("⚠️ 데모 모드 저장 완료"); return;
-                }
-                const col = collection(db, 'orders');
-                if (data.id && !data.id.startsWith('mock')) await updateDoc(doc(col, data.id), { ...data, updatedAt: serverTimestamp() });
-                else await addDoc(col, { ...data, displayId: `ORD-${Math.floor(Math.random()*1000)}`, createdAt: serverTimestamp(), userId: user?.uid });
-                setCurrentView('list'); setSelectedOrder(null);
-            };
-
-            const deleteOrder = async (id) => {
-                if (isDemo || !db) { setOrders(orders.filter(o => o.id !== id)); setCurrentView('list'); alert("삭제됨"); return; }
-                await deleteDoc(doc(db, 'orders', id)); setCurrentView('list');
-            };
-
-            const stats = useMemo(() => ({
-                ongoing: orders.filter(o => !['납품완료'].includes(o.status)).length,
-                pickup: orders.reduce((acc, o) => acc + (o.materials||[]).filter(m => m.status === '제작완료').length, 0),
-                urgent: orders.filter(o => o.deliveryDate && Math.ceil((new Date(o.deliveryDate) - new Date())/86400000) <= 2).length,
-                completed: orders.filter(o => ['납품완료'].includes(o.status)).length
-            }), [orders]);
-
-            const suppliers = useMemo(() => {
-                const s = {};
-                orders.forEach(o => (o.materials || []).forEach(m => {
-                    if (!s[m.supplier]) s[m.supplier] = [];
-                    s[m.supplier].push({ ...m, orderId: o.id, orderName: o.itemName });
-                }));
-                return s;
-            }, [orders]);
-
-            const handleNavigate = (order) => { setSelectedOrder(order); setCurrentView('detail'); };
-
-            if (loading) return <div className="flex h-screen items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-800"></div></div>;
-            if (!isAuthenticated) return <LoginView onLogin={handleLogin} />;
-
-            return (
-                <div className="flex h-screen bg-slate-100 font-sans text-slate-800">
-                    <div className="w-20 md:w-60 bg-slate-900 text-slate-300 flex flex-col flex-shrink-0">
-                        <div className="p-6 flex items-center gap-3 border-b border-slate-800">
-                            <div className="w-10 h-10 bg-white text-slate-900 rounded flex items-center justify-center font-bold text-xl">BK</div>
-                            <span className="font-bold text-lg hidden md:block">Breathe</span>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 my-4">
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                             <div class="font-bold text-slate-500 text-xs uppercase mb-2">Memo / Description</div>
+                             <div class="text-sm whitespace-pre-wrap text-slate-700 min-h-[80px]">${order.description || "메모 없음"}</div>
                         </div>
-                        <nav className="flex-1 p-4 space-y-2">
-                            {[{id:'dashboard', icon:LayoutDashboard, label:'현황'}, {id:'list', icon:FileText, label:'작업'}, {id:'materials', icon:Truck, label:'발주'}, {id:'calendar', icon:CalendarIcon, label:'일정'}].map(m=>(
-                                <button key={m.id} onClick={() => { setCurrentView(m.id); setSelectedOrder(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded ${currentView===m.id ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}>
-                                    <m.icon size={20} /> <span className="hidden md:block font-medium">{m.label}</span>
-                                </button>
-                            ))}
-                        </nav>
-                        <div className="p-4 text-xs text-center text-slate-500">{isAdmin ? '관리자(2203)' : '직원(4545)'}{isDemo && ' (체험판)'}</div>
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 flex flex-col">
+                             <div class="flex justify-between items-center mb-3">
+                                <h3 class="font-bold text-sm text-slate-700 flex gap-2">${lucide.createIcons()['FolderOpen'].toSvg({ size: 16 })} 도면/파일</h3>
+                                <span class="text-xs text-gray-400">${(order.files || []).length}개</span>
+                             </div>
+                             <div class="flex-1 space-y-2 mb-3 max-h-[150px] overflow-y-auto">
+                                ${filesHTML}
+                             </div>
+                             <!-- File Link Form simplified/disabled for now -->
+                             <div class="text-xs text-gray-400 border-t pt-2">파일/링크 추가 기능은 수정 폼에서 활성화됩니다.</div>
+                        </div>
                     </div>
-                    <div className="flex-1 flex flex-col overflow-hidden">
-                        <header className="h-14 bg-white border-b flex items-center justify-between px-6 shadow-sm">
-                            <h2 className="font-bold uppercase">{currentView}</h2>
-                            <div className={`text-xs px-2 py-1 rounded-full ${isDemo ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>{isDemo ? 'Demo Mode' : 'Online'}</div>
-                        </header>
-                        <main className="flex-1 overflow-y-auto p-4 md:p-6">
-                            <div className="max-w-5xl mx-auto">
-                                {currentView === 'dashboard' && <DashboardView orders={orders} stats={stats} suppliers={suppliers} onNavigate={handleNavigate} />}
-                                {currentView === 'list' && <ListView orders={orders} onSelect={handleNavigate} onAdd={() => { setSelectedOrder(null); setCurrentView('form'); }} />}
-                                {currentView === 'detail' && <DetailView order={selectedOrder} onBack={() => { setSelectedOrder(null); setCurrentView('list'); }} onUpdate={(data, view) => { if(view) setCurrentView(view); else saveOrder(data); }} isAdmin={isAdmin} currentUserId={user?.uid} />}
-                                {currentView === 'form' && <FormView order={selectedOrder} onSave={saveOrder} onDelete={deleteOrder} onCancel={() => { setSelectedOrder(null); setCurrentView('list'); }} isAdmin={isAdmin} currentUserId={user?.uid} />}
-                                {currentView === 'materials' && <MaterialManageView suppliers={suppliers} orders={orders} onUpdateOrder={saveOrder} />}
-                                {currentView === 'calendar' && <CalendarView orders={orders} onSelect={handleNavigate} />}
-                            </div>
-                        </main>
+                    
+                    <div class="space-y-2">
+                        <h3 class="font-bold flex gap-2 text-slate-700">${lucide.createIcons()['Package'].toSvg({ className: 'text-indigo-600' })} 자재 발주 내역</h3>
+                        ${CardHTML(`
+                           <div class="overflow-x-auto">
+                                <table class="w-full text-sm text-left min-w-[400px]">
+                                  <thead class="bg-slate-50 border-b"><tr><th class="p-2">일자</th><th class="p-2">거래처</th><th class="p-2">품목/수량</th><th class="p-2">상태</th></tr></thead>
+                                  <tbody>
+                                    ${matListHTML}
+                                  </tbody>
+                                </table>
+                           </div>
+                           <div class="p-3 bg-slate-50 border-t text-xs text-gray-400">자재 추가 기능은 수정 폼에서 활성화됩니다.</div>
+                        `, 'p-0 overflow-hidden')}
                     </div>
                 </div>
-            );
+            `;
+        }
+        
+        // Expose to global scope
+        window.handleEditOrder = (id) => {
+             state.selectedOrder = state.orders.find(o => o.id === id);
+             state.view = 'form';
+             renderApp();
         };
 
-        const root = createRoot(document.getElementById('root'));
-        root.render(<App />);
+        window.handleDeleteOrder = (id) => {
+            showDialog('정말 삭제하시겠습니까? 복구할 수 없습니다.', 'confirm', '작업 삭제 확인', async () => {
+                try {
+                    await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'orders', id));
+                    showDialog('성공적으로 삭제되었습니다.');
+                    navigate('list');
+                } catch (error) {
+                    console.error("Delete failed:", error);
+                    showDialog(`삭제 실패: ${error.message}`, 'alert', '오류');
+                }
+            });
+        };
+
+        function renderFormView(order) {
+            const isNew = !order;
+            const data = order || {
+                clientName: '', itemName: '', manager: '', technician: '',
+                orderDate: formatDate(new Date()), 
+                deliveryDate: '', status: '대기', description: '', clientContact: '', files: [], materials: []
+            };
+
+            const fields = [
+                { id: 'itemName', label: '작업명', type: 'text', placeholder: '예: 성수동 카페 테이블', className: 'md:col-span-2' },
+                { id: 'clientName', label: '의뢰인/업체명', type: 'text' },
+                { id: 'clientContact', label: '의뢰인 연락처', type: 'text' },
+                { id: 'manager', label: '담당자 (설계)', type: 'text' },
+                { id: 'technician', label: '작업자 (제작)', type: 'text' },
+                { id: 'orderDate', label: '의뢰일 (주문일)', type: 'date' },
+                { id: 'deliveryDate', label: '납품/시공 예정일', type: 'date', inputClass: 'font-bold text-red-600' },
+                { id: 'status', label: '진행 상태', type: 'select', options: ['대기', '설계중', '제작중', '도장/마감', '완료된 작업', '납품완료'], className: 'md:col-span-2' },
+                { id: 'description', label: '메모 / 특이사항', type: 'textarea', rows: 3, className: 'md:col-span-2' },
+            ];
+
+            let formHTML = fields.map(field => {
+                let inputElement;
+                const value = data[field.id] || '';
+                
+                if (field.type === 'select') {
+                    inputElement = `<select id="${field.id}" class="w-full border p-2 rounded mt-1">
+                        ${field.options.map(opt => `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                    </select>`;
+                } else if (field.type === 'textarea') {
+                    inputElement = `<textarea id="${field.id}" class="w-full border p-2 rounded mt-1" rows="${field.rows || 3}">${value}</textarea>`;
+                } else {
+                    inputElement = `<input id="${field.id}" type="${field.type}" value="${value}" 
+                        placeholder="${field.placeholder || ''}" 
+                        class="w-full border p-2 rounded mt-1 ${field.inputClass || ''}" />`;
+                }
+
+                return `
+                    <div class="${field.className || ''}">
+                        <label class="text-xs font-bold text-gray-500">${field.label}</label>
+                        ${inputElement}
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="h-full overflow-y-auto max-w-2xl mx-auto animate-fade-in pb-10 pr-1">
+                    <div onclick="navigate(state.selectedOrder ? 'detail' : 'list')" class="mb-4 cursor-pointer text-slate-500 flex items-center gap-1 hover:text-slate-800 sticky top-0 bg-slate-50 py-2 z-10">${lucide.createIcons()['ChevronLeft'].toSvg({ size: 20 })} 취소</div>
+                    ${CardHTML(`
+                        <div class="p-6 space-y-4">
+                            <h2 class="text-2xl font-bold">${isNew ? '새 작업 등록' : '작업 수정'}</h2>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                ${formHTML}
+                            </div>
+                            <div class="flex justify-end gap-2 pt-4 border-t">
+                                ${order ? `<button onclick="handleDeleteOrder('${order.id}')" class="text-red-500 px-4 font-bold text-sm hover:bg-red-50 rounded">삭제</button>` : ''}
+                                <button onclick="handleFormSave(${isNew})" class="bg-slate-800 text-white px-6 py-2 rounded font-bold hover:bg-slate-900">저장</button>
+                            </div>
+                        </div>
+                    `)}
+                </div>
+            `;
+        }
+        
+        window.handleFormSave = async (isNew) => {
+            if (!state.user || !state.user.uid) {
+                showDialog("로그인 정보가 유효하지 않습니다. 다시 로그인해주세요.", 'alert', '오류');
+                return;
+            }
+
+            // Collect data from the DOM
+            const data = {};
+            const fields = ['itemName', 'clientName', 'clientContact', 'manager', 'technician', 'orderDate', 'deliveryDate', 'status', 'description'];
+            fields.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) data[id] = el.value;
+            });
+
+            // Re-integrate existing data (materials/files) for updates
+            const existingOrder = state.selectedOrder;
+            data.materials = existingOrder ? existingOrder.materials : [];
+            data.files = existingOrder ? existingOrder.files : [];
+            
+            // --- CRITICAL FIX: Data Sanitization ---
+            const cleanData = {};
+            // 1. Copy data, excluding undefined/null values
+            Object.keys(data).forEach(key => {
+                if (data[key] !== undefined && data[key] !== null) {
+                    cleanData[key] = data[key];
+                }
+            });
+            // 2. Ensure critical arrays exist (even if empty) to prevent Firestore errors
+            if(!cleanData.materials) cleanData.materials = [];
+            if(!cleanData.files) cleanData.files = [];
+            // --- END CRITICAL FIX ---
+
+            if (!cleanData.itemName || !cleanData.clientName || !cleanData.deliveryDate) {
+                 showDialog("작업명, 의뢰인/업체명, 납품/시공 예정일은 필수 입력 항목입니다.", 'alert', '필수 항목 누락');
+                 return;
+            }
+
+            try {
+                if (!isNew) {
+                    // Update existing document
+                    await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'orders', existingOrder.id), cleanData);
+                    showDialog("성공적으로 수정되었습니다.");
+                    navigate('detail');
+                } else {
+                    // Create new document
+                    const newId = `ORD-24-${Math.floor(Math.random() * 100000).toString().padStart(3, '0')}`;
+                    await addDoc(getOrdersCollectionRef(), {
+                        ...cleanData,
+                        displayId: newId,
+                        createdAt: new Date().toISOString(),
+                        createdBy: state.user.uid
+                    });
+                    showDialog("새 작업이 등록되었습니다.");
+                    navigate('list');
+                }
+            } catch (error) {
+                console.error("Save failed:", error);
+                showDialog(`저장 실패: ${error.message}`, 'alert', '오류');
+            }
+        };
+
+        function renderMaterialManageView() {
+            const suppliersData = getSuppliersData(state.orders);
+
+            const supplierListHTML = Object.keys(suppliersData).map(s => {
+                const items = suppliersData[s];
+                const pickupCnt = items.filter(m => m.status === '제작완료').length;
+                const activeCnt = items.filter(m => m.status === '발주중').length;
+
+                return `
+                    <div onclick="document.getElementById('supplier-detail-view').innerHTML = renderSupplierDetail('${s}')" 
+                        class="p-3 border rounded-lg cursor-pointer transition-all bg-white hover:bg-slate-50">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="font-bold">${s}</span>
+                            ${pickupCnt > 0 ? `<span class="bg-indigo-100 text-indigo-600 text-[10px] px-1.5 py-0.5 rounded-full font-bold">Pick: ${pickupCnt}</span>` : ''}
+                        </div>
+                        <div class="text-xs flex justify-between opacity-70">
+                            <span>진행중: ${activeCnt}건</span>
+                            <span>총: ${items.length}건</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="flex h-full gap-4 animate-fade-in flex-col md:flex-row overflow-hidden pb-10 relative">
+                    <div class="w-full md:w-1/3 overflow-y-auto space-y-2 pr-0 md:pr-2 max-h-[200px] md:max-h-full flex-shrink-0">
+                         <button class="w-full py-2 border-2 border-dashed border-indigo-300 text-indigo-600 font-bold rounded-lg mb-2 hover:bg-indigo-50 flex justify-center items-center gap-2">
+                           ${lucide.createIcons()['Plus'].toSvg({ size: 16 })} 빠른 발주 등록 (비활성화)
+                        </button>
+                        ${supplierListHTML}
+                    </div>
+                    <div id="supplier-detail-view" class="flex-1 bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden shadow-sm">
+                        <div class="p-10 text-center text-gray-400">왼쪽에서 거래처를 선택하세요.</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Helper for MaterialManageView
+        window.renderSupplierDetail = (supplierName) => {
+            const suppliersData = getSuppliersData(state.orders);
+            const info = SUPPLIER_INFO[supplierName] || {};
+            const supplierMaterials = suppliersData[supplierName];
+
+            const materialsHTML = supplierMaterials.length === 0 ? '<div class="text-center text-gray-400 py-10 text-sm">해당 거래처에 발주된 내역이 없습니다.</div>' :
+                supplierMaterials.map((m, idx) => {
+                    const statusClass = 
+                        m.status === '제작완료' ? 'text-indigo-600 bg-indigo-50 border-indigo-200' : 
+                        m.status === '입고완료' ? 'text-green-600 bg-green-50 border-green-200' : 'text-slate-600';
+                    return `
+                        <div class="border rounded-lg p-3 flex justify-between items-center hover:bg-slate-50">
+                            <div>
+                                <div class="font-bold text-slate-700 mb-1">${m.item} <span class="text-xs font-normal text-gray-500">(${m.quantity})</span></div>
+                                <div class="text-xs text-indigo-500 font-medium">Project: ${m.orderName}</div>
+                                <div class="text-xs text-gray-400 mt-1">${m.date} 발주</div>
+                            </div>
+                            <select 
+                                onchange="handleMaterialStatusUpdate('${m.orderId}', ${m.id}, this.value)"
+                                class="text-xs font-bold border rounded p-1 outline-none ${statusClass}">
+                                <option value="발주중" ${m.status === '발주중' ? 'selected' : ''}>발주중</option>
+                                <option value="제작완료" ${m.status === '제작완료' ? 'selected' : ''}>제작완료</option>
+                                <option value="입고완료" ${m.status === '입고완료' ? 'selected' : ''}>입고완료</option>
+                            </select>
+                        </div>
+                    `;
+                }).join('');
+            
+            return `
+                <div class="p-4 border-b bg-slate-50">
+                    <h2 class="font-bold text-lg text-slate-800 mb-1">${supplierName}</h2>
+                    <div class="flex flex-col md:flex-row md:items-center gap-2 text-xs text-gray-500">
+                        <span class="flex items-center gap-1">${lucide.createIcons()['Phone'].toSvg({ size: 12 })} ${info.phone}</span>
+                        <span class="hidden md:inline">|</span>
+                        <span class="flex items-center gap-1">${lucide.createIcons()['MapPin'].toSvg({ size: 12 })} ${info.address}</span>
+                    </div>
+                </div>
+                <div class="flex-1 overflow-y-auto p-4 space-y-2">
+                    ${materialsHTML}
+                </div>
+            `;
+        }
+
+        window.handleMaterialStatusUpdate = async (orderId, materialId, newStatus) => {
+            const targetOrder = state.orders.find(o => o.id === orderId);
+            if (!targetOrder) return;
+
+            const updatedMats = targetOrder.materials.map(m => m.id === materialId ? {...m, status: newStatus} : m);
+            
+            try {
+                await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'orders', orderId), { materials: updatedMats });
+                showDialog("자재 상태가 업데이트되었습니다.");
+            } catch (error) {
+                console.error("Material update failed:", error);
+                showDialog(`업데이트 실패: ${error.message}`, 'alert', '오류');
+            }
+        };
+
+        function renderCalendarView() {
+            // Placeholder: Calendar logic is complex for vanilla JS
+            return `<div class="p-10 text-center text-gray-500">
+                        <h2>월간 스케줄러</h2>
+                        <p>바닐라 자바스크립트 변환의 복잡성으로 인해 달력 기능은 현재 비활성화되었습니다. 목록에서 확인해주세요.</p>
+                        <button onclick="navigate('list')" class="mt-4 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">작업 목록으로 이동</button>
+                    </div>`;
+        }
+
+
+        function renderMainContent() {
+            const mainContent = document.createElement('div');
+            mainContent.className = 'flex-1 overflow-hidden p-4 md:p-6 max-w-7xl mx-auto w-full';
+
+            let contentHTML = '';
+            let title = '';
+
+            if (state.view === 'dashboard') {
+                contentHTML = renderDashboard();
+                title = '작업 현황';
+            } else if (state.view === 'list') {
+                contentHTML = renderListView();
+                title = '작업 목록';
+            } else if (state.view === 'detail' && state.selectedOrder) {
+                contentHTML = renderDetailView(state.selectedOrder);
+                title = '작업 상세 정보';
+            } else if (state.view === 'form') {
+                contentHTML = renderFormView(state.selectedOrder);
+                title = state.selectedOrder ? '작업 수정' : '작업 등록';
+            } else if (state.view === 'materials') {
+                contentHTML = renderMaterialManageView();
+                title = '자재 발주 및 관리';
+            } else if (state.view === 'calendar') {
+                contentHTML = renderCalendarView();
+                title = '월간 스케줄러';
+            } else {
+                contentHTML = `<div class="p-10 text-center text-gray-500">페이지를 찾을 수 없습니다.</div>`;
+                title = '오류';
+            }
+
+            // Mobile Header/Menu Toggle for non-desktop
+            const toggleButtonHTML = state.user ? `
+                <div class="md:hidden fixed top-0 left-0 w-full bg-white border-b z-50 px-4 py-3 flex justify-between items-center">
+                    <div class="font-black text-lg flex items-center gap-2 text-slate-800">${lucide.createIcons()['Factory'].toSvg({ className: 'text-indigo-600' })} ${COMPANY_INFO.name}</div>
+                    <button onclick="toggleSidebar()" class="p-2 bg-slate-100 rounded">${state.sidebarOpen ? lucide.createIcons()['X'].toSvg({ size: 20 }) : lucide.createIcons()['LayoutDashboard'].toSvg({ size: 20 })}</button>
+                </div>
+            ` : '';
+
+            // Desktop Top Bar
+            const topBarHTML = state.user ? `
+                <div class="h-16 border-b bg-white hidden md:flex items-center justify-between px-6 relative z-20">
+                    <h2 class="font-bold text-lg">${title}</h2>
+                    <div class="flex items-center gap-4">
+                        <div class="text-xs font-bold text-slate-400">${new Date().toLocaleDateString()}</div>
+                        <div class="relative">
+                            <button class="p-2 hover:bg-slate-100 rounded-full relative">
+                                ${lucide.createIcons()['Bell'].toSvg({ size: 18, className: 'text-slate-400' })}
+                                <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ` : '';
+
+
+            mainContent.innerHTML = `
+                ${topBarHTML}
+                <div class="h-full overflow-y-auto pt-4 md:pt-0">
+                    ${contentHTML}
+                </div>
+            `;
+            
+            // Full application structure (Sidebar + Main Content)
+            const appContainer = document.getElementById('app');
+            appContainer.innerHTML = `
+                ${toggleButtonHTML}
+                ${renderSidebar()}
+                <main class="flex-1 flex flex-col h-full overflow-hidden pt-16 md:pt-0">
+                    ${mainContent.innerHTML}
+                </main>
+            `;
+            
+            lucide.createIcons(); // Re-render all icons after DOM update
+        }
+
+        // Expose to global scope
+        window.toggleSidebar = () => {
+            state.sidebarOpen = !state.sidebarOpen;
+            renderApp();
+        };
+
+        // --- Core Application Renderer ---
+        function renderApp() {
+            if (!state.user) {
+                renderLogin();
+            } else {
+                renderMainContent();
+            }
+        }
+
+        // --- Firebase Auth State Listener & Initial Load ---
+        auth.onAuthStateChanged(user => {
+            state.isAuthReady = true;
+
+            if (!state.user && localStorage.getItem('kkangtong_user')) {
+                if (user) {
+                    state.user = JSON.parse(localStorage.getItem('kkangtong_user'));
+                } else {
+                    localStorage.removeItem('kkangtong_user');
+                }
+            } else if (!user) {
+                state.user = null;
+            }
+
+            if (state.user && state.view === 'login') {
+                state.view = 'dashboard';
+            }
+
+            if(state.isAuthReady && state.user) {
+                listenToOrders();
+            }
+            
+            renderApp();
+        });
+
     </script>
 </body>
 </html>
