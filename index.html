@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>숨쉬는 깡통 - 통합 관리 시스템</title>
+    <title>숨쉬는 깡통</title>
     
     <!-- 1. Tailwind CSS (디자인) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -47,7 +47,7 @@
             LayoutDashboard, Plus, FileText, Calendar as CalendarIcon,
             Package, ChevronRight, ChevronLeft, Trash2, Edit3, Download, Link as LinkIcon,
             ChevronDown, ChevronUp, Wifi, Mail, CheckCircle2, Factory, ArrowRight,
-            Phone, MapPin, Bell, X, Truck, Search, AlertCircle, Map, Sparkles, Paperclip, File, Lock, Key
+            Phone, MapPin, Bell, X, Truck, Search, AlertCircle, Map, Sparkles, Paperclip, File, Lock, Key, User, HardHat
         } from 'lucide-react';
 
         // --- Firebase Imports ---
@@ -121,7 +121,8 @@
             mapUrl: 'https://map.naver.com/p/search/경기도 포천시 군내면 유교리 243-7'
         };
 
-        const SUPPLIER_INFO = {
+        // 기본 거래처 정보
+        const BASE_SUPPLIER_INFO = {
             '성수금속': { phone: '02-1234-5678', email: 'order@sungsu.com', address: '서울 성동구 성수이로 123', lat: 37.5445, lng: 127.0560 },
             '을지레이저': { phone: '02-2222-3333', email: 'laser@eulji.net', address: '서울 중구 을지로 4가 56', lat: 37.5660, lng: 126.9950 },
             '청계도장': { phone: '02-3333-4444', email: 'paint@chunggye.com', address: '서울 중구 청계천로 789', lat: 37.5690, lng: 127.0100 },
@@ -133,11 +134,11 @@
             {
                 id: 'mock-1',
                 displayId: 'ORD-24-101',
-                itemName: '테스트 작업 (오프라인 예시)',
+                itemName: '테스트 작업 (서버 연결 필요)',
                 clientName: '테스트 업체',
-                status: '제작중',
+                status: '작업중',
                 deliveryDate: new Date().toISOString().split('T')[0],
-                description: '서버 연결이 원활하지 않아 표시되는 예시 데이터입니다.',
+                description: '서버에 연결되면 실제 데이터가 표시됩니다.',
                 materials: []
             }
         ]; 
@@ -154,26 +155,40 @@
             return R * c;
         };
 
+        // 주소 -> 좌표 변환 (Mocking: 실제로는 Geocoding API 필요하나, 여기서는 근사치 랜덤 할당 또는 서울 중심 기준)
+        const getMockCoordinates = (address) => {
+            // 실제 배포환경에서는 Naver/Kakao Map API 등을 써야 정확함. 
+            // 데모용으로 성수동 근처 좌표 랜덤 반환
+            return { lat: 37.54 + (Math.random() * 0.05), lng: 127.05 + (Math.random() * 0.05) };
+        };
+
         // --- Helper Components ---
         const StatusBadge = ({ status }) => {
             const colors = {
                 '대기': 'bg-gray-100 text-gray-600',
                 '설계중': 'bg-blue-100 text-blue-700',
-                '제작중': 'bg-amber-100 text-amber-700',
-                '도장/마감': 'bg-purple-100 text-purple-700',
-                '완료된 작업': 'bg-slate-200 text-slate-500 font-medium',
-                '납품완료': 'bg-green-100 text-green-700',
+                '작업중': 'bg-amber-100 text-amber-700',
+                '도장/마감중': 'bg-purple-100 text-purple-700',
+                '작업완료': 'bg-teal-100 text-teal-700 font-bold',
+                '납품완료': 'bg-slate-200 text-slate-500 line-through',
             };
             return <span className={`flex-shrink-0 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap ${colors[status] || 'bg-gray-100'}`}>{status}</span>;
         };
 
-        const MaterialStatusBadge = ({ status }) => {
+        const MaterialStatusBadge = ({ status, onClick }) => {
             const colors = {
-                '발주중': 'bg-yellow-100 text-yellow-700',
-                '제작완료': 'bg-indigo-100 text-indigo-700 font-bold animate-pulse',
-                '입고완료': 'bg-green-100 text-green-700',
+                '발주': 'bg-yellow-100 text-yellow-700',
+                '회수대기': 'bg-red-100 text-red-700 font-bold animate-pulse cursor-pointer',
+                '회수완료': 'bg-gray-200 text-gray-500',
             };
-            return <span className={`flex-shrink-0 px-2 py-0.5 rounded text-[11px] whitespace-nowrap ${colors[status] || 'bg-gray-100'}`}>{status}</span>;
+            return (
+                <span 
+                    onClick={onClick}
+                    className={`flex-shrink-0 px-2 py-0.5 rounded text-[11px] whitespace-nowrap select-none ${colors[status] || 'bg-gray-100'} ${onClick ? 'cursor-pointer hover:opacity-80 ring-1 ring-transparent hover:ring-current' : ''}`}
+                >
+                    {status}
+                </span>
+            );
         };
 
         const Card = ({ children, className = "", onClick }) => (
@@ -234,7 +249,7 @@
             );
         };
 
-        // --- Components (Restored) ---
+        // --- Components ---
 
         const Dashboard = ({ orders, stats, suppliers, onNavigate, isAdmin, currentUserId }) => {
             const [activeStat, setActiveStat] = useState(null);
@@ -245,15 +260,15 @@
             const generateBriefing = async () => {
                 setIsGeneratingBriefing(true);
                 const urgentTasks = orders.filter(o => {
-                    if (!o.deliveryDate || ['납품완료', '완료된 작업'].includes(o.status)) return false;
+                    if (!o.deliveryDate || ['납품완료', '작업완료'].includes(o.status)) return false;
                     return Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2;
                 }).map(o => `${o.itemName}(${o.deliveryDate}마감)`).join(', ');
 
                 const prompt = `
-                    너는 금속 인테리어 회사 '숨쉬는 깡통'의 데이터 분석가야.
-                    오늘의 작업 현황을 바탕으로 팀원들에게 공유할 '일일 브리핑'을 작성해 줘.
-                    [데이터] 진행중:${stats.ongoing}, 회수대기:${stats.pickup}, 긴급:${stats.urgent} (${urgentTasks || '없음'}).
-                    간결하게 5줄 이내 개조식으로 작성해.
+                    너는 금속 인테리어 회사 '숨쉬는 깡통'의 매니저야.
+                    오늘의 현황: 진행중:${stats.ongoing}건, 회수대기:${stats.pickup}건, 긴급:${stats.urgent}건.
+                    긴급항목: ${urgentTasks || '없음'}.
+                    위 내용을 바탕으로 아주 간단명료하게 3줄 이내로 브리핑해줘. 군더더기 없이 핵심만 말해.
                 `;
 
                 const result = await callGemini(prompt);
@@ -261,19 +276,37 @@
                 setIsGeneratingBriefing(false);
             };
 
+            // 동선 최적화 (사용자 입력 주소 반영)
             const optimizedRoute = useMemo(() => {
-                const pickupTargets = Object.keys(suppliers).filter(n => 
-                    suppliers[n].some(m => m.status === '제작완료')
+                // 회수대기 상태인 거래처 찾기
+                const pickupTargets = Object.keys(suppliers).filter(name => 
+                    suppliers[name].some(m => m.status === '회수대기')
                 );
+
                 if (pickupTargets.length === 0) return [];
 
                 let currentLoc = { lat: COMPANY_INFO.lat, lng: COMPANY_INFO.lng, name: 'start' };
-                let unvisited = pickupTargets.map(name => ({
-                    name,
-                    lat: SUPPLIER_INFO[name]?.lat || 37.5, 
-                    lng: SUPPLIER_INFO[name]?.lng || 127.0,
-                    count: suppliers[name].filter(m => m.status === '제작완료').length
-                }));
+                
+                // 방문해야 할 노드들 구성 (상수에 없으면 자재 데이터 내 주소/좌표 사용)
+                let unvisited = pickupTargets.map(name => {
+                    const materials = suppliers[name];
+                    // 사용자 정의 거래처의 경우 materials[0]에 저장된 주소 정보 활용
+                    const customInfo = materials[0]?.supplierInfo || {};
+                    const baseInfo = BASE_SUPPLIER_INFO[name] || {};
+                    
+                    // 좌표가 없으면 임의 생성 (실제 앱에선 Geocoding 필요)
+                    const lat = customInfo.lat || baseInfo.lat || 37.55; 
+                    const lng = customInfo.lng || baseInfo.lng || 127.0;
+                    const address = customInfo.address || baseInfo.address || '주소 미상';
+
+                    return {
+                        name,
+                        lat,
+                        lng,
+                        address,
+                        count: materials.filter(m => m.status === '회수대기').length
+                    };
+                });
 
                 const route = [];
                 while (unvisited.length > 0) {
@@ -304,20 +337,20 @@
                 if (activeStat === 'pickup') {
                     const list = [];
                     orders.forEach(o => (o.materials || []).forEach(m => {
-                        if (m.status === '제작완료') {
+                        if (m.status === '회수대기') {
                             list.push({ ...m, orderName: o.itemName, orderId: o.id, type: 'material' });
                         }
                     }));
                     return list;
                 }
                 return orders.filter(o => {
-                    if (activeStat === 'ongoing') return !['납품완료', '완료된 작업'].includes(o.status);
+                    if (activeStat === 'ongoing') return !['납품완료', '작업완료'].includes(o.status);
                     if (activeStat === 'urgent') {
-                        if (!o.deliveryDate || ['납품완료', '완료된 작업'].includes(o.status)) return false;
+                        if (!o.deliveryDate || ['납품완료', '작업완료'].includes(o.status)) return false;
                         return Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2;
                     }
                     if (activeStat === 'completed') {
-                        const isDone = ['납품완료', '완료된 작업'].includes(o.status);
+                        const isDone = ['납품완료', '작업완료'].includes(o.status);
                         const oneMonthAgo = new Date();
                         oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
                         const delDate = new Date(o.deliveryDate);
@@ -378,7 +411,7 @@
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={()=>setAiBriefing(null)}>
                         <div className="bg-white w-full max-w-md rounded-xl p-6" onClick={e=>e.stopPropagation()}>
                             <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Sparkles className="text-yellow-500"/> AI 브리핑</h3>
-                            <div className="bg-slate-50 p-4 rounded text-sm mb-4 whitespace-pre-wrap font-mono">{aiBriefing}</div>
+                            <div className="bg-slate-50 p-4 rounded text-sm mb-4 whitespace-pre-wrap leading-relaxed font-medium text-slate-700">{aiBriefing}</div>
                             <button onClick={()=>setAiBriefing(null)} className="w-full bg-slate-800 text-white py-2 rounded font-bold">닫기</button>
                         </div>
                     </div>
@@ -388,16 +421,16 @@
                 {activeRoutePopup && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={()=>setActiveRoutePopup(null)}>
                         <div className="bg-white w-full max-w-sm rounded-xl p-4" onClick={e=>e.stopPropagation()}>
-                            <h3 className="font-bold text-lg mb-2">{activeRoutePopup}</h3>
-                            <div className="text-sm text-gray-500 mb-4">{SUPPLIER_INFO[activeRoutePopup]?.address}</div>
+                            <h3 className="font-bold text-lg mb-2">{activeRoutePopup.name}</h3>
+                            <div className="text-sm text-gray-500 mb-4">{activeRoutePopup.address}</div>
                             <div className="space-y-2 mb-4">
-                                {(suppliers[activeRoutePopup] || []).filter(m=>m.status==='제작완료').map((item, i)=>(
+                                {(suppliers[activeRoutePopup.name] || []).filter(m=>m.status==='회수대기').map((item, i)=>(
                                     <div key={i} className="bg-slate-50 p-2 rounded text-sm flex justify-between">
                                         <span>{item.item}</span><span className="font-bold">{item.quantity}</span>
                                     </div>
                                 ))}
                             </div>
-                            <a href={`https://map.naver.com/p/search/${SUPPLIER_INFO[activeRoutePopup]?.address}`} target="_blank" className="block w-full bg-indigo-600 text-white text-center py-3 rounded font-bold">지도 열기</a>
+                            <a href={`https://map.naver.com/p/search/${activeRoutePopup.address}`} target="_blank" className="block w-full bg-indigo-600 text-white text-center py-3 rounded font-bold">지도 열기</a>
                         </div>
                     </div>
                 )}
@@ -409,7 +442,7 @@
                 <div>
                     <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><FileText size={18}/> 최신 작업</h3>
                     <div className="grid gap-3">
-                    {orders.filter(o => !['납품완료', '완료된 작업'].includes(o.status)).slice(0, 3).map(o => (
+                    {orders.filter(o => !['납품완료', '작업완료'].includes(o.status)).slice(0, 3).map(o => (
                         <Card key={o.id} className="p-4 flex justify-between items-center cursor-pointer hover:border-blue-400" onClick={() => onNavigate(o)}>
                             <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1"><StatusBadge status={o.status} /><span className="text-xs text-gray-400">{o.displayId}</span></div>
@@ -429,7 +462,7 @@
                         {optimizedRoute.map((stop, i) => (
                             <React.Fragment key={i}>
                                 <ArrowRight size={14} className="text-indigo-300" />
-                                <button onClick={() => setActiveRoutePopup(stop.name)} className="bg-indigo-600 text-white px-3 py-2 rounded shadow text-sm font-bold hover:bg-indigo-700">
+                                <button onClick={() => setActiveRoutePopup(stop)} className="bg-indigo-600 text-white px-3 py-2 rounded shadow text-sm font-bold hover:bg-indigo-700">
                                     {i+1}. {stop.name} <span className="bg-white/20 px-1 rounded text-[10px] ml-1">{stop.count}</span>
                                 </button>
                             </React.Fragment>
@@ -450,7 +483,7 @@
             
             orders.filter(o => (o.itemName || '').toLowerCase().includes(searchTerm.toLowerCase())).forEach(o => {
                 if (['대기', '설계중'].includes(o.status)) groups.design.push(o);
-                else if (['제작중', '도장/마감'].includes(o.status)) groups.prod.push(o);
+                else if (['작업중', '도장/마감중'].includes(o.status)) groups.prod.push(o);
                 else groups.done.push(o);
             });
 
@@ -492,7 +525,7 @@
                     </button>
                 </div>
                 <Section id="design" title="설계 단계" items={groups.design} />
-                <Section id="prod" title="제작 단계" items={groups.prod} />
+                <Section id="prod" title="제작/마감 단계" items={groups.prod} />
                 <Section id="done" title="완료" items={groups.done} />
                 </div>
             );
@@ -501,14 +534,27 @@
         const DetailView = ({ order, onBack, onUpdate, isAdmin, currentUserId }) => {
             if (!order) return null;
             const canEdit = isAdmin || order.userId === currentUserId;
-            const [mat, setMat] = useState({ supplier: '', item: '', quantity: '', status: '발주중', date: new Date().toISOString().split('T')[0] });
+            const [mat, setMat] = useState({ supplier: '', item: '', quantity: '', status: '발주', date: new Date().toISOString().split('T')[0] });
             const [link, setLink] = useState({ name: '', url: '' });
             const [showSuggestions, setShowSuggestions] = useState(false);
-            const supplierOptions = Object.keys(SUPPLIER_INFO);
+            const supplierOptions = Object.keys(BASE_SUPPLIER_INFO);
             const filteredSuppliers = supplierOptions.filter(s => s.includes(mat.supplier));
 
             const updateOrder = (newData) => {
                 onUpdate({ ...order, ...newData });
+            };
+
+            const cycleStatus = (currentStatus) => {
+                if (currentStatus === '발주') return '회수대기';
+                if (currentStatus === '회수대기') return '회수완료';
+                return '발주';
+            };
+
+            const handleStatusClick = (m) => {
+                if (!canEdit) return;
+                const nextStatus = cycleStatus(m.status);
+                const updated = order.materials.map(x => x.id === m.id ? { ...x, status: nextStatus } : x);
+                updateOrder({ materials: updated });
             };
 
             return (
@@ -524,13 +570,23 @@
                         {canEdit && <button onClick={() => onUpdate(null, 'form')} className="bg-slate-100 px-3 py-2 rounded flex gap-2 text-sm font-bold"><Edit3 size={16} /> 수정</button>}
                     </div>
 
-                    <Card className="p-5 mb-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                        <div><div className="text-gray-400 text-xs uppercase mb-1">Client</div><div className="font-bold">{order.clientName}</div><div className="text-gray-500">{order.clientContact}</div></div>
-                        <div><div className="text-gray-400 text-xs uppercase mb-1">Delivery</div><div className="font-bold text-red-600">{order.deliveryDate}</div></div>
+                    <Card className="p-5 mb-4 text-sm space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                             <div><div className="text-gray-400 text-xs uppercase mb-1">Client</div><div className="font-bold">{order.clientName}</div></div>
+                             <div><div className="text-gray-400 text-xs uppercase mb-1">Delivery Addr</div><div className="font-bold break-keep">{order.deliveryAddress || '-'}</div></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><div className="text-gray-400 text-xs uppercase mb-1">Manager</div><div className="font-bold flex items-center gap-1"><User size={12}/>{order.manager || '-'}</div></div>
+                            <div><div className="text-gray-400 text-xs uppercase mb-1">Worker</div><div className="font-bold flex items-center gap-1"><HardHat size={12}/>{order.technician || '-'}</div></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                             <div><div className="text-gray-400 text-xs uppercase mb-1">Ordered</div><div className="font-bold">{order.orderDate}</div></div>
+                             <div><div className="text-gray-400 text-xs uppercase mb-1">Deadline</div><div className="font-bold text-red-600">{order.deliveryDate}</div></div>
+                        </div>
                         <div><div className="text-gray-400 text-xs uppercase mb-1">Memo</div><div className="text-slate-700 whitespace-pre-wrap">{order.description || '-'}</div></div>
                     </Card>
 
-                    {/* Files Section (Compact) */}
+                    {/* Files Section */}
                     <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col mb-4">
                         <div className="flex justify-between items-center mb-3">
                             <h3 className="font-bold text-sm text-slate-700 flex gap-2"><FileBox size={16} /> 도면/파일</h3>
@@ -552,7 +608,6 @@
                             ))}
                         </div>
 
-                        {/* Compact Add Form */}
                         {canEdit && (
                         <div className="flex gap-1 border-t pt-2">
                             <input placeholder="파일명" className="w-1/3 border p-1.5 rounded text-xs bg-gray-50" value={link.name} onChange={e => setLink({ ...link, name: e.target.value })} />
@@ -567,6 +622,7 @@
                     </div>
 
                     <h3 className="font-bold mb-2 flex items-center gap-2"><Package size={18}/> 자재 발주 내역</h3>
+                    <p className="text-xs text-gray-500 mb-2">* 상태를 클릭하면 발주/회수대기/회수완료 순으로 변경됩니다.</p>
                     <Card className="p-0 overflow-hidden mb-10">
                         <table className="w-full text-sm text-left">
                             <thead className="bg-slate-50 border-b"><tr><th className="p-2">거래처</th><th className="p-2">품목</th><th className="p-2">상태</th></tr></thead>
@@ -576,17 +632,7 @@
                                         <td className="p-2 font-bold">{m.supplier}</td>
                                         <td className="p-2">{m.item} ({m.quantity})</td>
                                         <td className="p-2">
-                                            <select 
-                                                value={m.status} 
-                                                className="bg-transparent font-bold cursor-pointer text-xs outline-none" 
-                                                disabled={!canEdit}
-                                                onChange={(e) => {
-                                                const updated = order.materials.map(x => x.id === m.id ? { ...x, status: e.target.value } : x);
-                                                updateOrder({ materials: updated });
-                                                }}
-                                            >
-                                                <option>발주중</option><option>제작완료</option><option>입고완료</option>
-                                            </select>
+                                            <MaterialStatusBadge status={m.status} onClick={() => handleStatusClick(m)} />
                                         </td>
                                     </tr>
                                 ))}
@@ -598,7 +644,7 @@
                                 <div className="flex flex-col md:flex-row gap-2 mb-2 items-start">
                                     <div className="relative flex-1 min-w-0 w-full" onClick={e=>e.stopPropagation()}>
                                     <input 
-                                        placeholder="거래처 (클릭하여 선택)" 
+                                        placeholder="거래처" 
                                         className="border p-2 rounded w-full text-sm" 
                                         value={mat.supplier} 
                                         onFocus={()=>setShowSuggestions(true)}
@@ -635,9 +681,12 @@
 
         const FormView = ({ order, onSave, onDelete, onCancel, isAdmin, currentUserId }) => {
             const [data, setData] = useState(order || {
-                clientName: '', itemName: '', manager: '', technician: '',
+                clientName: '', itemName: '', 
+                manager: '', technician: '', // 담당자, 작업자
+                deliveryAddress: '', // 납품 주소
                 orderDate: new Date().toISOString().split('T')[0], 
-                deliveryDate: '', status: '대기', description: '', clientContact: '', files: []
+                deliveryDate: '', 
+                status: '대기', description: '', clientContact: '', files: []
             });
             const [isAiSuggesting, setIsAiSuggesting] = useState(false);
             const fileInputRef = useRef(null);
@@ -673,18 +722,64 @@
                     <Card className="p-6 space-y-4">
                         <h2 className="text-2xl font-bold">{order ? '수정' : '새 작업 등록'}</h2>
                         <div className="grid gap-4">
-                            <input className="border p-2 rounded w-full" placeholder="작업명" value={data.itemName} onChange={e=>setData({...data, itemName:e.target.value})}/>
-                            <div className="grid grid-cols-2 gap-2">
-                                <input className="border p-2 rounded" placeholder="업체명" value={data.clientName} onChange={e=>setData({...data, clientName:e.target.value})}/>
-                                <input className="border p-2 rounded" placeholder="연락처" value={data.clientContact} onChange={e=>setData({...data, clientContact:e.target.value})}/>
+                            <div className="grid grid-cols-1 gap-1">
+                                <label className="text-xs font-bold text-gray-500">작업명</label>
+                                <input className="border p-2 rounded w-full" value={data.itemName} onChange={e=>setData({...data, itemName:e.target.value})}/>
                             </div>
-                            <input type="date" className="border p-2 rounded w-full" value={data.deliveryDate} onChange={e=>setData({...data, deliveryDate:e.target.value})}/>
-                            <select className="border p-2 rounded w-full" value={data.status} onChange={e=>setData({...data, status:e.target.value})}>
-                                <option>대기</option><option>설계중</option><option>제작중</option><option>도장/마감</option><option>완료된 작업</option><option>납품완료</option>
-                            </select>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500">담당자 (Manager)</label>
+                                    <input className="border p-2 rounded w-full" value={data.manager} onChange={e=>setData({...data, manager:e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500">작업자 (Technician)</label>
+                                    <input className="border p-2 rounded w-full" value={data.technician} onChange={e=>setData({...data, technician:e.target.value})}/>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500">클라이언트</label>
+                                    <input className="border p-2 rounded w-full" value={data.clientName} onChange={e=>setData({...data, clientName:e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500">연락처</label>
+                                    <input className="border p-2 rounded w-full" value={data.clientContact} onChange={e=>setData({...data, clientContact:e.target.value})}/>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-bold text-gray-500">납품/시공 주소</label>
+                                <input className="border p-2 rounded w-full" placeholder="주소를 입력하세요" value={data.deliveryAddress} onChange={e=>setData({...data, deliveryAddress:e.target.value})}/>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500">발주(접수) 날짜</label>
+                                    <input type="date" className="border p-2 rounded w-full" value={data.orderDate} onChange={e=>setData({...data, orderDate:e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500 text-red-500">납품(마감) 날짜</label>
+                                    <input type="date" className="border p-2 rounded w-full" value={data.deliveryDate} onChange={e=>setData({...data, deliveryDate:e.target.value})}/>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-bold text-gray-500">진행 상태</label>
+                                <select className="border p-2 rounded w-full" value={data.status} onChange={e=>setData({...data, status:e.target.value})}>
+                                    <option>대기</option>
+                                    <option>설계중</option>
+                                    <option>작업중</option>
+                                    <option>도장/마감중</option>
+                                    <option>작업완료</option>
+                                    <option>납품완료</option>
+                                </select>
+                            </div>
+
                             <div>
                                 <div className="flex justify-between mb-1">
-                                    <label className="text-xs font-bold">메모</label>
+                                    <label className="text-xs font-bold text-gray-500">작업 내용 / 메모</label>
                                     <button onClick={handleAiSuggest} className="text-xs text-indigo-600 font-bold">{isAiSuggesting ? '생성중...' : 'AI 추천'}</button>
                                 </div>
                                 <textarea className="border p-2 rounded w-full h-24" value={data.description} onChange={e=>setData({...data, description:e.target.value})}/>
@@ -721,62 +816,98 @@
             );
         };
 
-        // --- Missing Components Restored: MaterialManageView, CalendarView ---
-
         const MaterialManageView = ({ suppliers, orders, onUpdateOrder }) => {
             const [selectedSupplier, setSelectedSupplier] = useState(null);
             const [isCustomMode, setIsCustomMode] = useState(false);
-            const info = SUPPLIER_INFO[selectedSupplier];
+            const baseInfo = BASE_SUPPLIER_INFO[selectedSupplier];
+            
             const [quickAdd, setQuickAdd] = useState(false);
-            const [newMat, setNewMat] = useState({ orderId: '', item: '', quantity: '', status: '발주중', supplier: '' });
+            const [newMat, setNewMat] = useState({ orderId: '', item: '', quantity: '', status: '발주', supplier: '' });
+            // 새 거래처 등록용 추가 정보
+            const [newSupplierInfo, setNewSupplierInfo] = useState({ phone: '', email: '', address: '' });
 
             useEffect(() => { 
                 if (selectedSupplier && !isCustomMode) {
-                setNewMat(prev => ({ ...prev, supplier: selectedSupplier }));
+                    setNewMat(prev => ({ ...prev, supplier: selectedSupplier }));
                 }
             }, [selectedSupplier, isCustomMode]);
 
             const handleQuickAdd = async () => {
                 if(!newMat.item) return alert("품목을 입력하세요");
+                if(isCustomMode && !newMat.supplier) return alert("거래처명을 입력하세요.");
                 
                 let targetOrder = orders.find(o => o.id === newMat.orderId);
                 
                 if (!targetOrder && !newMat.orderId) {
-                if(window.confirm("선택된 프로젝트가 없습니다. '기타 발주' 항목으로 새로 만들까요?")) {
-                    const miscTask = {
-                        id: `misc-${Date.now()}`,
-                        itemName: '기타 자재 발주',
-                        clientName: '내부',
-                        status: '제작중',
-                        createdAt: new Date(), 
-                        deadline: new Date().toISOString().split('T')[0],
-                        materials: []
-                    };
-                    targetOrder = miscTask;
-                } else {
-                    return;
-                }
+                    if(window.confirm("선택된 프로젝트가 없습니다. '기타 발주' 항목으로 새로 만들까요?")) {
+                        const miscTask = {
+                            id: `misc-${Date.now()}`,
+                            itemName: '기타 자재 발주',
+                            clientName: '내부',
+                            status: '작업중',
+                            createdAt: new Date(), 
+                            orderDate: new Date().toISOString().split('T')[0],
+                            deliveryDate: new Date().toISOString().split('T')[0],
+                            materials: []
+                        };
+                        targetOrder = miscTask;
+                    } else {
+                        return;
+                    }
                 }
 
                 const finalSupplier = isCustomMode ? newMat.supplier : selectedSupplier;
-                if(!finalSupplier) return alert("거래처를 입력하거나 선택하세요.");
-
+                
                 const materialData = {
-                id: Date.now(), 
-                supplier: finalSupplier, 
-                item: newMat.item,
-                quantity: newMat.quantity, 
-                status: '발주중', 
-                date: new Date().toISOString().split('T')[0]
+                    id: Date.now(), 
+                    supplier: finalSupplier, 
+                    item: newMat.item,
+                    quantity: newMat.quantity, 
+                    status: '발주', 
+                    date: new Date().toISOString().split('T')[0]
                 };
+
+                // 새 거래처 정보가 있다면 자재 데이터에 함께 저장 (회수 동선을 위해)
+                if (isCustomMode) {
+                    materialData.supplierInfo = {
+                        ...newSupplierInfo,
+                        ...getMockCoordinates(newSupplierInfo.address) // 주소 기반 가짜 좌표 생성
+                    };
+                }
 
                 const updatedMaterials = [...(targetOrder.materials || []), materialData];
                 await onUpdateOrder({ ...targetOrder, materials: updatedMaterials });
                 
                 setQuickAdd(false);
                 setNewMat({ ...newMat, item: '', quantity: '' });
+                setNewSupplierInfo({ phone: '', email: '', address: '' });
                 alert("발주가 등록되었습니다!");
             };
+
+            // 자재 상태 사이클
+            const cycleStatus = (currentStatus) => {
+                if (currentStatus === '발주') return '회수대기';
+                if (currentStatus === '회수대기') return '회수완료';
+                return '발주';
+            };
+
+            const toggleStatus = async (m) => {
+                const order = orders.find(o => o.id === m.orderId);
+                if (order) {
+                    const nextStatus = cycleStatus(m.status);
+                    const updated = order.materials.map(x => x.id === m.id ? { ...x, status: nextStatus } : x);
+                    await onUpdateOrder({ ...order, materials: updated });
+                }
+            };
+
+            // 선택된 거래처의 연락처 정보 (기본정보 또는 해당 거래처의 첫 번째 자재 정보에서 가져옴)
+            const currentSupplierInfo = useMemo(() => {
+                if (baseInfo) return baseInfo;
+                if (selectedSupplier && suppliers[selectedSupplier]) {
+                    return suppliers[selectedSupplier][0]?.supplierInfo || {};
+                }
+                return {};
+            }, [selectedSupplier, suppliers, baseInfo]);
 
             return (
                 <div className="flex h-full gap-4 animate-fade-in flex-col md:flex-row overflow-hidden">
@@ -787,15 +918,15 @@
                     </div>
                     {Object.keys(suppliers).map(s => {
                     const items = suppliers[s];
-                    const pickupCnt = items.filter(m => m.status === '제작완료').length;
-                    const activeCnt = items.filter(m => m.status === '발주중').length;
+                    const pickupCnt = items.filter(m => m.status === '회수대기').length;
+                    const activeCnt = items.filter(m => m.status === '발주').length;
                     return (
                         <div key={s} onClick={() => { setSelectedSupplier(s); setIsCustomMode(false); }} className={`p-3 border rounded-lg cursor-pointer transition-all ${selectedSupplier === s && !isCustomMode ? 'bg-slate-800 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
                         <div className="flex justify-between items-center mb-1">
                             <span className="font-bold">{s}</span>
                             {pickupCnt > 0 && <span className="bg-indigo-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold animate-pulse">회수 {pickupCnt}</span>}
                         </div>
-                        <div className="text-xs opacity-70">작업중 {activeCnt}건 / 총 {items.length}건</div>
+                        <div className="text-xs opacity-70">발주중 {activeCnt}건 / 총 {items.length}건</div>
                         </div>
                     )
                     })}
@@ -806,18 +937,27 @@
                     <div className="mb-4 pb-4 border-b flex-shrink-0">
                         <div className="flex justify-between items-start mb-2">
                         {isCustomMode ? (
-                            <input className="text-2xl font-bold border-b border-gray-300 focus:border-indigo-500 outline-none placeholder-gray-300" placeholder="거래처명 입력" value={newMat.supplier} onChange={e => setNewMat({...newMat, supplier: e.target.value})}/>
+                            <input className="text-2xl font-bold border-b border-gray-300 focus:border-indigo-500 outline-none placeholder-gray-300 w-full" placeholder="거래처명 입력" value={newMat.supplier} onChange={e => setNewMat({...newMat, supplier: e.target.value})}/>
                         ) : (
                             <h2 className="text-2xl font-bold truncate">{selectedSupplier}</h2>
                         )}
-                        <button onClick={() => setQuickAdd(!quickAdd)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold flex items-center gap-1 flex-shrink-0"><Plus size={14} /> 자재 등록</button>
+                        <button onClick={() => setQuickAdd(!quickAdd)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold flex items-center gap-1 flex-shrink-0 ml-2"><Plus size={14} /> 자재 등록</button>
                         </div>
-                        {!isCustomMode && info ? (
-                        <div className="flex flex-wrap gap-4 text-xs md:text-sm text-gray-600 bg-slate-50 p-3 rounded">
-                            <div className="flex items-center gap-1"><Phone size={14} /> {info.phone}</div>
-                            <div className="flex items-center gap-1"><MapPin size={14} /> {info.address}</div>
-                        </div>
-                        ) : !isCustomMode ? <div className="text-sm text-gray-400">연락처 정보가 등록되지 않았습니다.</div> : null}
+                        
+                        {/* 거래처 정보 표시 영역 */}
+                        {!isCustomMode ? (
+                            <div className="flex flex-wrap gap-4 text-xs md:text-sm text-gray-600 bg-slate-50 p-3 rounded">
+                                {currentSupplierInfo.phone ? <div className="flex items-center gap-1"><Phone size={14} /> {currentSupplierInfo.phone}</div> : <span className="text-gray-400">전화번호 없음</span>}
+                                {currentSupplierInfo.address ? <div className="flex items-center gap-1"><MapPin size={14} /> {currentSupplierInfo.address}</div> : <span className="text-gray-400">주소 없음</span>}
+                            </div>
+                        ) : (
+                            /* 새 거래처 등록 시 추가 정보 입력 */
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-slate-50 p-3 rounded mt-2">
+                                <input placeholder="전화번호" className="border p-2 rounded text-sm" value={newSupplierInfo.phone} onChange={e => setNewSupplierInfo({...newSupplierInfo, phone: e.target.value})}/>
+                                <input placeholder="이메일" className="border p-2 rounded text-sm" value={newSupplierInfo.email} onChange={e => setNewSupplierInfo({...newSupplierInfo, email: e.target.value})}/>
+                                <input placeholder="주소 (회수 동선용)" className="border p-2 rounded text-sm" value={newSupplierInfo.address} onChange={e => setNewSupplierInfo({...newSupplierInfo, address: e.target.value})}/>
+                            </div>
+                        )}
                     </div>
 
                     {(quickAdd || isCustomMode) && (
@@ -837,26 +977,13 @@
 
                     <div className="flex-1 overflow-y-auto">
                         <table className="w-full text-sm text-left min-w-[300px]">
-                        <thead className="bg-slate-50 border-b sticky top-0 z-10"><tr><th className="p-2">상태</th><th className="p-2">품목/수량</th><th className="p-2 hidden md:table-cell">관련 프로젝트</th><th className="p-2 text-right">관리</th></tr></thead>
+                        <thead className="bg-slate-50 border-b sticky top-0 z-10"><tr><th className="p-2">상태 (클릭변경)</th><th className="p-2">품목/수량</th><th className="p-2 hidden md:table-cell">관련 프로젝트</th></tr></thead>
                         <tbody>
                             {(!isCustomMode && suppliers[selectedSupplier]) ? suppliers[selectedSupplier].map((m, i) => (
                             <tr key={i} className="border-b hover:bg-slate-50">
-                            <td className="p-2"><MaterialStatusBadge status={m.status} /></td>
+                            <td className="p-2"><MaterialStatusBadge status={m.status} onClick={() => toggleStatus(m)} /></td>
                             <td className="p-2"><div className="font-bold text-slate-700">{m.item}</div><div className="text-xs text-gray-500">{m.quantity}</div><div className="md:hidden text-xs text-indigo-500 mt-1">{m.orderName}</div></td>
                             <td className="p-2 hidden md:table-cell text-gray-500 text-xs">{m.orderName}</td>
-                            <td className="p-2 text-right">
-                                {m.status === '제작완료' && (
-                                <button onClick={async () => {
-                                    const order = orders.find(o => o.id === m.orderId);
-                                    if (order) {
-                                    const updated = order.materials.map(x => x.id === m.id ? { ...x, status: '입고완료' } : x);
-                                    await onUpdateOrder({ ...order, materials: updated });
-                                    }
-                                }} className="bg-green-500 text-white px-2 py-1 rounded text-xs font-bold inline-flex items-center gap-1 hover:bg-green-600">
-                                    <CheckCircle2 size={12} /> 회수
-                                </button>
-                                )}
-                            </td>
                             </tr>
                         )) : isCustomMode ? (
                             <tr><td colSpan="4" className="p-4 text-center text-gray-400">등록된 자재 내역이 없습니다. 위에서 새로 등록해보세요!</td></tr>
@@ -927,13 +1054,17 @@
             const [orders, setOrders] = useState([]);
             const [loading, setLoading] = useState(true);
             const [isOnline, setIsOnline] = useState(false);
+            const [connectionError, setConnectionError] = useState(null);
             
             const [isAuthenticated, setIsAuthenticated] = useState(false);
             const [isAdmin, setIsAdmin] = useState(false);
 
             const [currentView, setCurrentView] = useState('dashboard');
             const [selectedOrder, setSelectedOrder] = useState(null);
-            const [showNotiPanel, setShowNotiPanel] = useState(false);
+            
+            // 알림용 상태
+            const [urgentCount, setUrgentCount] = useState(0);
+            const [showAlertPopup, setShowAlertPopup] = useState(false);
 
             // Firebase Initialization
             const { auth, db, appId } = useMemo(() => {
@@ -950,25 +1081,24 @@
                 }
             }, []);
 
-            // Auth & Data Loading Logic (수정됨: 실패 시에도 로딩 해제)
+            // Auth & Data Loading Logic
             useEffect(() => {
                 let unsubAuth = null;
                 let unsubData = null;
 
                 const init = async () => {
                     if (!auth) {
-                        // Firebase가 없으면 Mock Data 사용
                         setOrders(MOCK_DATA);
                         setLoading(false);
                         return;
                     }
 
                     try {
-                        // 로그인 시도
+                        // 로그인 시도 (익명 로그인)
                         await signInAnonymously(auth);
                     } catch (error) {
-                        console.error("로그인 실패 (아마도 도메인 문제):", error);
-                        // 로그인이 실패해도 앱이 멈추지 않도록 Mock Data 로드 + 로딩 해제
+                        console.error("Firebase Auth Failed:", error);
+                        setConnectionError("인증 서버 연결 실패");
                         setOrders(MOCK_DATA);
                         setLoading(false);
                         return;
@@ -978,7 +1108,7 @@
                     unsubAuth = onAuthStateChanged(auth, (u) => {
                         setUser(u);
                         if (!u) {
-                             // 유저가 없으면 로딩 해제 (오프라인 모드)
+                             // 유저가 없으면 로딩 해제
                              setOrders(MOCK_DATA);
                              setLoading(false);
                         }
@@ -1001,18 +1131,30 @@
                 
                 const unsub = onSnapshot(q, (snap) => {
                     const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    setOrders(data.length > 0 ? data : MOCK_DATA);
-                    setIsOnline(true); // 데이터 수신 성공 -> 온라인
+                    setOrders(data.length > 0 ? data : []); // 데이터가 없으면 빈 배열 (Mock Data 덮어쓰기 방지)
+                    setIsOnline(true); 
+                    setConnectionError(null);
                     setLoading(false);
                 }, (err) => {
-                    console.warn("데이터 수신 실패:", err);
-                    setIsOnline(false); // 실패 -> 오프라인
-                    setOrders(MOCK_DATA); // 실패시 Mock Data
-                    setLoading(false); // 로딩은 반드시 끝내야 함
+                    console.warn("Firestore Data Error:", err);
+                    // 권한 문제 등으로 실패 시
+                    setIsOnline(false);
+                    setConnectionError("데이터베이스 접근 권한이 없거나 오프라인입니다.");
+                    setOrders(MOCK_DATA); // 실패시 Mock Data 보여줌
+                    setLoading(false); 
                 });
 
                 return () => unsub();
             }, [user, db, appId]);
+
+            // 긴급 알림 카운트 업데이트
+            useEffect(() => {
+                const urgent = orders.filter(o => {
+                    if (!o.deliveryDate || ['납품완료', '작업완료'].includes(o.status)) return false;
+                    return Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2;
+                }).length;
+                setUrgentCount(urgent);
+            }, [orders]);
 
             const handleLogin = (role) => {
                 setIsAuthenticated(true);
@@ -1021,15 +1163,13 @@
 
             const saveOrder = async (data) => {
                 if (!isOnline || !db) {
-                    // 오프라인 상태일 때 로컬 상태만 업데이트
-                    alert("현재 오프라인(또는 데모) 모드입니다. 데이터가 서버에 저장되지 않고 임시로만 보입니다.");
+                    alert("현재 오프라인 상태이거나 권한이 없어 임시 저장만 가능합니다.");
                     if(data.id && !data.id.startsWith('mock')) setOrders(orders.map(o=>o.id===data.id?data:o));
                     else setOrders([...orders, {...data, id: `mock-new-${Date.now()}`, displayId: `ORD-TEMP`, createdAt: new Date().toISOString()}]);
                     setCurrentView('list');
                     setSelectedOrder(null);
                     return;
                 }
-                // 온라인일 때
                 try {
                     const col = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
                     if (data.id && !data.id.startsWith('mock')) {
@@ -1061,10 +1201,10 @@
             // Derived Stats
             const stats = useMemo(() => {
                 return {
-                    ongoing: orders.filter(o => !['납품완료', '완료된 작업'].includes(o.status)).length,
-                    pickup: orders.reduce((acc, cur) => acc + (cur.materials || []).filter(m => m.status === '제작완료').length, 0),
-                    urgent: orders.filter(o => o.deliveryDate && !['납품완료', '완료된 작업'].includes(o.status) && Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2).length,
-                    completed: orders.filter(o => ['납품완료', '완료된 작업'].includes(o.status)).length
+                    ongoing: orders.filter(o => !['납품완료', '작업완료'].includes(o.status)).length,
+                    pickup: orders.reduce((acc, cur) => acc + (cur.materials || []).filter(m => m.status === '회수대기').length, 0),
+                    urgent: orders.filter(o => o.deliveryDate && !['납품완료', '작업완료'].includes(o.status) && Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2).length,
+                    completed: orders.filter(o => ['납품완료', '작업완료'].includes(o.status)).length
                 };
             }, [orders]);
 
@@ -1080,22 +1220,26 @@
             const handleNavigate = (order) => {
                 setSelectedOrder(order);
                 setCurrentView('detail');
+                setShowAlertPopup(false);
             };
 
             if (!isAuthenticated) return <LoginView onLogin={handleLogin} />;
             
-            // 로딩 중 화면
             if (loading) return (
                 <div className="flex h-screen items-center justify-center bg-slate-100 flex-col gap-4">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-800"></div>
-                    <p className="text-slate-500 text-sm animate-pulse">데이터를 불러오는 중...</p>
+                    <p className="text-slate-500 text-sm animate-pulse">시스템 불러오는 중...</p>
                 </div>
             );
 
             return (
                 <div className="flex h-screen bg-slate-100 font-sans text-slate-800 overflow-hidden">
+                    {/* Sidebar */}
                     <div className="w-16 md:w-60 bg-slate-900 text-slate-300 flex flex-col flex-shrink-0">
-                        <div className="p-4 flex items-center gap-3 justify-center md:justify-start font-bold text-xl text-white"><div className="bg-white text-slate-900 rounded px-1">BK</div><span className="hidden md:block">Manager</span></div>
+                        <div className="p-4 flex items-center gap-3 justify-center md:justify-start font-bold text-xl text-white">
+                            <div className="bg-white text-slate-900 rounded px-1 flex-shrink-0">BK</div>
+                            <span className="hidden md:block text-sm whitespace-nowrap">숨쉬는 깡통</span>
+                        </div>
                         <nav className="flex-1 p-2 space-y-2">
                             {[
                                 { id: 'dashboard', icon: LayoutDashboard, label: '현황' },
@@ -1109,15 +1253,16 @@
                             ))}
                         </nav>
                         <div className="p-4 text-xs text-slate-500 text-center md:text-left">
-                            {isAdmin ? 'Admin Mode' : 'Employee Mode'}
+                            {isAdmin ? '관리자 모드' : '작업자 모드'}
                             <div className={`mt-1 flex items-center gap-1 justify-center md:justify-start ${isOnline ? 'text-green-500' : 'text-red-500'}`}>
-                                <Wifi size={10}/> {isOnline ? 'Online' : 'Offline (Demo)'}
+                                <Wifi size={10}/> {isOnline ? 'Online' : 'Offline'}
                             </div>
+                            {!isOnline && <div className="text-[10px] mt-1 text-red-400">{connectionError}</div>}
                         </div>
                     </div>
 
                     <main className="flex-1 flex flex-col overflow-hidden relative bg-slate-100">
-                        <header className="h-14 md:h-16 bg-white border-b flex items-center justify-between px-4 md:px-6 shadow-sm flex-shrink-0">
+                        <header className="h-14 md:h-16 bg-white border-b flex items-center justify-between px-4 md:px-6 shadow-sm flex-shrink-0 z-20 relative">
                             <h2 className="font-bold text-lg md:text-xl uppercase text-slate-800">
                                 {currentView === 'dashboard' && '현황'}
                                 {currentView === 'calendar' && '일정'}
@@ -1126,6 +1271,28 @@
                                 {currentView === 'detail' && '작업 상세'}
                                 {currentView === 'form' && (selectedOrder ? '작업 수정' : '새 작업 등록')}
                             </h2>
+                            
+                            {/* 상단 알림 아이콘 */}
+                            <div className="relative">
+                                <button onClick={()=>setShowAlertPopup(!showAlertPopup)} className="p-2 hover:bg-slate-100 rounded-full relative">
+                                    <Bell className={urgentCount > 0 ? 'text-red-500' : 'text-gray-400'} />
+                                    {urgentCount > 0 && <span className="absolute top-1 right-1 w-4 h-4 bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">{urgentCount}</span>}
+                                </button>
+                                {showAlertPopup && (
+                                    <div className="absolute right-0 top-full mt-2 w-72 bg-white border rounded-xl shadow-xl p-3 z-50">
+                                        <h4 className="font-bold text-sm mb-2 flex items-center gap-2 text-red-600"><AlertCircle size={16}/> 마감 임박 ({urgentCount})</h4>
+                                        <div className="space-y-1 max-h-60 overflow-y-auto">
+                                            {orders.filter(o => o.deliveryDate && !['납품완료', '작업완료'].includes(o.status) && Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2).map(o => (
+                                                <div key={o.id} onClick={()=>handleNavigate(o)} className="text-xs p-2 hover:bg-slate-50 rounded cursor-pointer border-b last:border-0">
+                                                    <div className="font-bold truncate">{o.itemName}</div>
+                                                    <div className="text-gray-500 flex justify-between"><span>{o.displayId}</span><span>{o.deliveryDate} 마감</span></div>
+                                                </div>
+                                            ))}
+                                            {urgentCount === 0 && <div className="text-xs text-gray-400 text-center py-4">임박한 작업이 없습니다.</div>}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </header>
 
                         <div className="h-full overflow-y-auto p-4 md:p-6">
