@@ -5,17 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>숨쉬는 깡통</title>
     
-    <!-- 1. Tailwind CSS (디자인) -->
+    <!-- 1. Tailwind CSS (Design) -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- 2. 폰트 (Pretendard) -->
+    <!-- 2. Fonts (Pretendard) -->
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
     <style>
         body { font-family: 'Pretendard', sans-serif; }
-        /* 스크롤바 숨김 처리 */
+        /* Scrollbar hiding */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        /* 애니메이션 */
+        /* Animation */
         .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
@@ -59,7 +59,7 @@
         } from 'firebase/firestore';
 
         // ---------------------------------------------------------
-        // ✅ Firebase 설정
+        // ✅ Firebase Config
         // ---------------------------------------------------------
         const firebaseConfig = {
             apiKey: "AIzaSyB5W8qJbYMNyzPu8jmbAifCBH9qgZsQOJA",
@@ -72,7 +72,7 @@
         };
 
         // ---------------------------------------------------------
-        // ✅ Gemini API 키
+        // ✅ Gemini API Key
         // ---------------------------------------------------------
         const GEMINI_API_KEY = "AIzaSyAAuopjonzUutbkTZXv5PbqfKz2hDsNRes";
 
@@ -121,7 +121,6 @@
             mapUrl: 'https://map.naver.com/p/search/경기도 포천시 군내면 유교리 243-7'
         };
 
-        // 기본 거래처 정보
         const BASE_SUPPLIER_INFO = {
             '성수금속': { phone: '02-1234-5678', email: 'order@sungsu.com', address: '서울 성동구 성수이로 123', lat: 37.5445, lng: 127.0560 },
             '을지레이저': { phone: '02-2222-3333', email: 'laser@eulji.net', address: '서울 중구 을지로 4가 56', lat: 37.5660, lng: 126.9950 },
@@ -138,6 +137,7 @@
                 clientName: '테스트 업체',
                 status: '작업중',
                 deliveryDate: new Date().toISOString().split('T')[0],
+                completedDate: '', // 완료일 필드 추가
                 description: '서버에 연결되면 실제 데이터가 표시됩니다.',
                 materials: []
             }
@@ -155,10 +155,7 @@
             return R * c;
         };
 
-        // 주소 -> 좌표 변환 (Mocking: 실제로는 Geocoding API 필요하나, 여기서는 근사치 랜덤 할당 또는 서울 중심 기준)
         const getMockCoordinates = (address) => {
-            // 실제 배포환경에서는 Naver/Kakao Map API 등을 써야 정확함. 
-            // 데모용으로 성수동 근처 좌표 랜덤 반환
             return { lat: 37.54 + (Math.random() * 0.05), lng: 127.05 + (Math.random() * 0.05) };
         };
 
@@ -180,11 +177,12 @@
                 '발주': 'bg-yellow-100 text-yellow-700',
                 '회수대기': 'bg-red-100 text-red-700 font-bold animate-pulse cursor-pointer',
                 '회수완료': 'bg-gray-200 text-gray-500',
+                '정보': 'bg-slate-100 text-slate-500 border border-slate-200', // 정보등록용 스타일 추가
             };
             return (
                 <span 
                     onClick={onClick}
-                    className={`flex-shrink-0 px-2 py-0.5 rounded text-[11px] whitespace-nowrap select-none ${colors[status] || 'bg-gray-100'} ${onClick ? 'cursor-pointer hover:opacity-80 ring-1 ring-transparent hover:ring-current' : ''}`}
+                    className={`flex-shrink-0 px-2 py-0.5 rounded text-[11px] whitespace-nowrap select-none ${colors[status] || 'bg-gray-100'} ${onClick && status !== '정보' ? 'cursor-pointer hover:opacity-80 ring-1 ring-transparent hover:ring-current' : ''}`}
                 >
                     {status}
                 </span>
@@ -278,7 +276,6 @@
 
             // 동선 최적화 (사용자 입력 주소 반영)
             const optimizedRoute = useMemo(() => {
-                // 회수대기 상태인 거래처 찾기
                 const pickupTargets = Object.keys(suppliers).filter(name => 
                     suppliers[name].some(m => m.status === '회수대기')
                 );
@@ -287,14 +284,11 @@
 
                 let currentLoc = { lat: COMPANY_INFO.lat, lng: COMPANY_INFO.lng, name: 'start' };
                 
-                // 방문해야 할 노드들 구성 (상수에 없으면 자재 데이터 내 주소/좌표 사용)
                 let unvisited = pickupTargets.map(name => {
                     const materials = suppliers[name];
-                    // 사용자 정의 거래처의 경우 materials[0]에 저장된 주소 정보 활용
                     const customInfo = materials[0]?.supplierInfo || {};
                     const baseInfo = BASE_SUPPLIER_INFO[name] || {};
                     
-                    // 좌표가 없으면 임의 생성 (실제 앱에선 Geocoding 필요)
                     const lat = customInfo.lat || baseInfo.lat || 37.55; 
                     const lng = customInfo.lng || baseInfo.lng || 127.0;
                     const address = customInfo.address || baseInfo.address || '주소 미상';
@@ -552,6 +546,7 @@
 
             const handleStatusClick = (m) => {
                 if (!canEdit) return;
+                if (m.status === '정보') return; // 정보 타입은 상태 변경 불가
                 const nextStatus = cycleStatus(m.status);
                 const updated = order.materials.map(x => x.id === m.id ? { ...x, status: nextStatus } : x);
                 updateOrder({ materials: updated });
@@ -581,7 +576,14 @@
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                              <div><div className="text-gray-400 text-xs uppercase mb-1">Ordered</div><div className="font-bold">{order.orderDate}</div></div>
-                             <div><div className="text-gray-400 text-xs uppercase mb-1">Deadline</div><div className="font-bold text-red-600">{order.deliveryDate}</div></div>
+                             <div>
+                                <div className="text-gray-400 text-xs uppercase mb-1">
+                                    {['납품완료', '작업완료'].includes(order.status) ? 'Completed' : 'Deadline'}
+                                </div>
+                                <div className={`font-bold ${['납품완료', '작업완료'].includes(order.status) ? 'text-blue-600' : 'text-red-600'}`}>
+                                    {['납품완료', '작업완료'].includes(order.status) && order.completedDate ? order.completedDate : order.deliveryDate}
+                                </div>
+                             </div>
                         </div>
                         <div><div className="text-gray-400 text-xs uppercase mb-1">Memo</div><div className="text-slate-700 whitespace-pre-wrap">{order.description || '-'}</div></div>
                     </Card>
@@ -682,16 +684,24 @@
         const FormView = ({ order, onSave, onDelete, onCancel, isAdmin, currentUserId }) => {
             const [data, setData] = useState(order || {
                 clientName: '', itemName: '', 
-                manager: '', technician: '', // 담당자, 작업자
-                deliveryAddress: '', // 납품 주소
+                manager: '', technician: '', 
+                deliveryAddress: '', 
                 orderDate: new Date().toISOString().split('T')[0], 
                 deliveryDate: '', 
+                completedDate: '', // 초기값 설정
                 status: '대기', description: '', clientContact: '', files: []
             });
             const [isAiSuggesting, setIsAiSuggesting] = useState(false);
             const fileInputRef = useRef(null);
 
             const canEdit = !order || isAdmin || order.userId === currentUserId;
+
+            // 완료 상태일 때 기본 완료일이 없으면 오늘 날짜로 설정
+            useEffect(() => {
+                if (['납품완료', '작업완료'].includes(data.status) && !data.completedDate) {
+                    setData(prev => ({ ...prev, completedDate: new Date().toISOString().split('T')[0] }));
+                }
+            }, [data.status]);
 
             const handleAiSuggest = async () => {
                 if (!data.itemName) return alert('작업명을 입력하세요.');
@@ -777,6 +787,14 @@
                                 </select>
                             </div>
 
+                            {/* 완료 상태일 경우 실제 완료일 입력 필드 노출 */}
+                            {['작업완료', '납품완료'].includes(data.status) && (
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500 text-blue-600">실제 완료일 (시공/납품 완료)</label>
+                                    <input type="date" className="border p-2 rounded w-full bg-blue-50 border-blue-200" value={data.completedDate || ''} onChange={e=>setData({...data, completedDate:e.target.value})}/>
+                                </div>
+                            )}
+
                             <div>
                                 <div className="flex justify-between mb-1">
                                     <label className="text-xs font-bold text-gray-500">작업 내용 / 메모</label>
@@ -785,7 +803,6 @@
                                 <textarea className="border p-2 rounded w-full h-24" value={data.description} onChange={e=>setData({...data, description:e.target.value})}/>
                             </div>
 
-                            {/* File Attachment Section */}
                             <div className="border-t pt-4 mt-2">
                                 <label className="text-xs font-bold text-gray-500 mb-2 block">도면 / 파일 첨부</label>
                                 <div className="space-y-2">
@@ -823,7 +840,6 @@
             
             const [quickAdd, setQuickAdd] = useState(false);
             const [newMat, setNewMat] = useState({ orderId: '', item: '', quantity: '', status: '발주', supplier: '' });
-            // 새 거래처 등록용 추가 정보
             const [newSupplierInfo, setNewSupplierInfo] = useState({ phone: '', email: '', address: '' });
 
             useEffect(() => { 
@@ -833,8 +849,9 @@
             }, [selectedSupplier, isCustomMode]);
 
             const handleQuickAdd = async () => {
-                if(!newMat.item) return alert("품목을 입력하세요");
-                if(isCustomMode && !newMat.supplier) return alert("거래처명을 입력하세요.");
+                // 수정: 직접 입력 모드에서는 품목이 없어도 거래처 등록 가능
+                if (!newMat.item && !isCustomMode) return alert("품목을 입력하세요");
+                if (isCustomMode && !newMat.supplier) return alert("거래처명을 입력하세요.");
                 
                 let targetOrder = orders.find(o => o.id === newMat.orderId);
                 
@@ -858,20 +875,25 @@
 
                 const finalSupplier = isCustomMode ? newMat.supplier : selectedSupplier;
                 
+                // 품목이 없는 경우(거래처 정보만 등록) 처리
+                const isInfoRegistration = isCustomMode && !newMat.item;
+                const itemToSave = isInfoRegistration ? "거래처 정보" : newMat.item;
+                const quantityToSave = isInfoRegistration ? "-" : newMat.quantity;
+                const statusToSave = isInfoRegistration ? "정보" : "발주";
+
                 const materialData = {
                     id: Date.now(), 
                     supplier: finalSupplier, 
-                    item: newMat.item,
-                    quantity: newMat.quantity, 
-                    status: '발주', 
+                    item: itemToSave,
+                    quantity: quantityToSave, 
+                    status: statusToSave, 
                     date: new Date().toISOString().split('T')[0]
                 };
 
-                // 새 거래처 정보가 있다면 자재 데이터에 함께 저장 (회수 동선을 위해)
                 if (isCustomMode) {
                     materialData.supplierInfo = {
                         ...newSupplierInfo,
-                        ...getMockCoordinates(newSupplierInfo.address) // 주소 기반 가짜 좌표 생성
+                        ...getMockCoordinates(newSupplierInfo.address)
                     };
                 }
 
@@ -881,10 +903,9 @@
                 setQuickAdd(false);
                 setNewMat({ ...newMat, item: '', quantity: '' });
                 setNewSupplierInfo({ phone: '', email: '', address: '' });
-                alert("발주가 등록되었습니다!");
+                alert(isInfoRegistration ? "거래처 정보가 등록되었습니다!" : "발주가 등록되었습니다!");
             };
 
-            // 자재 상태 사이클
             const cycleStatus = (currentStatus) => {
                 if (currentStatus === '발주') return '회수대기';
                 if (currentStatus === '회수대기') return '회수완료';
@@ -892,6 +913,7 @@
             };
 
             const toggleStatus = async (m) => {
+                if (m.status === '정보') return; // 정보 타입은 상태 변경 안함
                 const order = orders.find(o => o.id === m.orderId);
                 if (order) {
                     const nextStatus = cycleStatus(m.status);
@@ -900,7 +922,6 @@
                 }
             };
 
-            // 선택된 거래처의 연락처 정보 (기본정보 또는 해당 거래처의 첫 번째 자재 정보에서 가져옴)
             const currentSupplierInfo = useMemo(() => {
                 if (baseInfo) return baseInfo;
                 if (selectedSupplier && suppliers[selectedSupplier]) {
@@ -944,14 +965,12 @@
                         <button onClick={() => setQuickAdd(!quickAdd)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold flex items-center gap-1 flex-shrink-0 ml-2"><Plus size={14} /> 자재 등록</button>
                         </div>
                         
-                        {/* 거래처 정보 표시 영역 */}
                         {!isCustomMode ? (
                             <div className="flex flex-wrap gap-4 text-xs md:text-sm text-gray-600 bg-slate-50 p-3 rounded">
                                 {currentSupplierInfo.phone ? <div className="flex items-center gap-1"><Phone size={14} /> {currentSupplierInfo.phone}</div> : <span className="text-gray-400">전화번호 없음</span>}
                                 {currentSupplierInfo.address ? <div className="flex items-center gap-1"><MapPin size={14} /> {currentSupplierInfo.address}</div> : <span className="text-gray-400">주소 없음</span>}
                             </div>
                         ) : (
-                            /* 새 거래처 등록 시 추가 정보 입력 */
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-slate-50 p-3 rounded mt-2">
                                 <input placeholder="전화번호" className="border p-2 rounded text-sm" value={newSupplierInfo.phone} onChange={e => setNewSupplierInfo({...newSupplierInfo, phone: e.target.value})}/>
                                 <input placeholder="이메일" className="border p-2 rounded text-sm" value={newSupplierInfo.email} onChange={e => setNewSupplierInfo({...newSupplierInfo, email: e.target.value})}/>
@@ -962,22 +981,24 @@
 
                     {(quickAdd || isCustomMode) && (
                         <div className="mb-4 p-3 bg-indigo-50 rounded border border-indigo-100 animate-fade-in flex-shrink-0">
-                        <div className="text-sm font-bold text-indigo-800 mb-2">새 자재 발주 추가</div>
+                        <div className="text-sm font-bold text-indigo-800 mb-2">새 자재 발주 / 거래처 등록</div>
                         <div className="flex flex-col md:flex-row gap-2 mb-2">
                             <select className="border p-2 rounded flex-1 text-sm min-w-0" value={newMat.orderId} onChange={e => setNewMat({ ...newMat, orderId: e.target.value })}>
                             <option value="">프로젝트 선택 (없으면 기타)</option>
                             {orders.filter(o => !['납품완료'].includes(o.status)).map(o => <option key={o.id} value={o.id}>{o.itemName}</option>)}
                             </select>
-                            <input placeholder="품목명" className="border p-2 rounded flex-1 text-sm min-w-0" value={newMat.item} onChange={e => setNewMat({ ...newMat, item: e.target.value })} />
+                            <input placeholder={isCustomMode ? "품목명 (비워두면 정보만 저장)" : "품목명"} className="border p-2 rounded flex-1 text-sm min-w-0" value={newMat.item} onChange={e => setNewMat({ ...newMat, item: e.target.value })} />
                             <input placeholder="수량" className="border p-2 rounded w-full md:w-20 text-sm" value={newMat.quantity} onChange={e => setNewMat({ ...newMat, quantity: e.target.value })} />
                         </div>
-                        <button onClick={handleQuickAdd} className="w-full bg-indigo-600 text-white py-2 rounded text-sm font-bold hover:bg-indigo-700">등록하기</button>
+                        <button onClick={handleQuickAdd} className="w-full bg-indigo-600 text-white py-2 rounded text-sm font-bold hover:bg-indigo-700">
+                            {isCustomMode && !newMat.item ? "거래처 정보만 등록" : "등록하기"}
+                        </button>
                         </div>
                     )}
 
                     <div className="flex-1 overflow-y-auto">
                         <table className="w-full text-sm text-left min-w-[300px]">
-                        <thead className="bg-slate-50 border-b sticky top-0 z-10"><tr><th className="p-2">상태 (클릭변경)</th><th className="p-2">품목/수량</th><th className="p-2 hidden md:table-cell">관련 프로젝트</th></tr></thead>
+                        <thead className="bg-slate-50 border-b sticky top-0 z-10"><tr><th className="p-2">상태</th><th className="p-2">품목/수량</th><th className="p-2 hidden md:table-cell">관련 프로젝트</th></tr></thead>
                         <tbody>
                             {(!isCustomMode && suppliers[selectedSupplier]) ? suppliers[selectedSupplier].map((m, i) => (
                             <tr key={i} className="border-b hover:bg-slate-50">
@@ -1026,17 +1047,26 @@
                     {days.map((d, i) => {
                         if (!d) return <div key={i} className="bg-slate-50 border-r border-b"></div>;
                         const dateStr = d.toISOString().split('T')[0];
-                        const events = orders.filter(o => o.deliveryDate === dateStr);
+                        // 수정: 완료된 작업은 완료일 기준, 진행중인 작업은 마감일 기준으로 달력에 표시
+                        const events = orders.filter(o => {
+                            const targetDate = (['작업완료', '납품완료'].includes(o.status) && o.completedDate) 
+                                ? o.completedDate 
+                                : o.deliveryDate;
+                            return targetDate === dateStr;
+                        });
+                        
                         const isToday = dateStr === new Date().toISOString().split('T')[0];
                         return (
                         <div key={i} className={`border-r border-b p-1 bg-white min-h-[60px] flex flex-col ${isToday ? 'bg-blue-50' : ''}`}>
                             <div className={`text-xs font-bold mb-1 text-center ${isToday ? 'text-blue-600' : 'text-gray-500'}`}>{d.getDate()}</div>
                             <div className="space-y-1 overflow-y-auto flex-1 no-scrollbar">
-                            {events.map(ev => (
-                                <div key={ev.id} onClick={() => onSelect(ev)} className="text-[10px] p-1 bg-red-50 text-red-800 border-l-2 border-red-500 truncate cursor-pointer rounded hover:opacity-80">
+                            {events.map(ev => {
+                                const isDone = ['작업완료', '납품완료'].includes(ev.status);
+                                return (
+                                <div key={ev.id} onClick={() => onSelect(ev)} className={`text-[10px] p-1 truncate cursor-pointer rounded hover:opacity-80 ${isDone ? 'bg-slate-100 text-slate-500 border-l-2 border-slate-400 line-through' : 'bg-red-50 text-red-800 border-l-2 border-red-500'}`}>
                                 {ev.itemName}
                                 </div>
-                            ))}
+                            )})}
                             </div>
                         </div>
                         )
@@ -1062,7 +1092,6 @@
             const [currentView, setCurrentView] = useState('dashboard');
             const [selectedOrder, setSelectedOrder] = useState(null);
             
-            // 알림용 상태
             const [urgentCount, setUrgentCount] = useState(0);
             const [showAlertPopup, setShowAlertPopup] = useState(false);
 
@@ -1094,7 +1123,6 @@
                     }
 
                     try {
-                        // 로그인 시도 (익명 로그인)
                         await signInAnonymously(auth);
                     } catch (error) {
                         console.error("Firebase Auth Failed:", error);
@@ -1104,11 +1132,9 @@
                         return;
                     }
 
-                    // 인증 상태 감지
                     unsubAuth = onAuthStateChanged(auth, (u) => {
                         setUser(u);
                         if (!u) {
-                             // 유저가 없으면 로딩 해제
                              setOrders(MOCK_DATA);
                              setLoading(false);
                         }
@@ -1123,7 +1149,6 @@
                 }
             }, [auth]);
 
-            // 유저가 로그인 된 후에만 실행되는 데이터 리스너
             useEffect(() => {
                 if (!user || !db) return;
 
@@ -1131,23 +1156,21 @@
                 
                 const unsub = onSnapshot(q, (snap) => {
                     const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    setOrders(data.length > 0 ? data : []); // 데이터가 없으면 빈 배열 (Mock Data 덮어쓰기 방지)
+                    setOrders(data.length > 0 ? data : []); 
                     setIsOnline(true); 
                     setConnectionError(null);
                     setLoading(false);
                 }, (err) => {
                     console.warn("Firestore Data Error:", err);
-                    // 권한 문제 등으로 실패 시
                     setIsOnline(false);
                     setConnectionError("데이터베이스 접근 권한이 없거나 오프라인입니다.");
-                    setOrders(MOCK_DATA); // 실패시 Mock Data 보여줌
+                    setOrders(MOCK_DATA); 
                     setLoading(false); 
                 });
 
                 return () => unsub();
             }, [user, db, appId]);
 
-            // 긴급 알림 카운트 업데이트
             useEffect(() => {
                 const urgent = orders.filter(o => {
                     if (!o.deliveryDate || ['납품완료', '작업완료'].includes(o.status)) return false;
@@ -1198,7 +1221,6 @@
                 }
             };
 
-            // Derived Stats
             const stats = useMemo(() => {
                 return {
                     ongoing: orders.filter(o => !['납품완료', '작업완료'].includes(o.status)).length,
@@ -1234,7 +1256,6 @@
 
             return (
                 <div className="flex h-screen bg-slate-100 font-sans text-slate-800 overflow-hidden">
-                    {/* Sidebar */}
                     <div className="w-16 md:w-60 bg-slate-900 text-slate-300 flex flex-col flex-shrink-0">
                         <div className="p-4 flex items-center gap-3 justify-center md:justify-start font-bold text-xl text-white">
                             <div className="bg-white text-slate-900 rounded px-1 flex-shrink-0">BK</div>
@@ -1272,7 +1293,6 @@
                                 {currentView === 'form' && (selectedOrder ? '작업 수정' : '새 작업 등록')}
                             </h2>
                             
-                            {/* 상단 알림 아이콘 */}
                             <div className="relative">
                                 <button onClick={()=>setShowAlertPopup(!showAlertPopup)} className="p-2 hover:bg-slate-100 rounded-full relative">
                                     <Bell className={urgentCount > 0 ? 'text-red-500' : 'text-gray-400'} />
