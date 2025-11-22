@@ -1409,8 +1409,8 @@
             const [isOnline, setIsOnline] = useState(false);
             const [connectionError, setConnectionError] = useState(null);
             
-            const [isAuthenticated, setIsAuthenticated] = useState(false);
-            const [isAdmin, setIsAdmin] = useState(false);
+            const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem('bk_auth') === 'true');
+            const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('bk_role') === 'admin');
 
             const [currentView, setCurrentView] = useState('dashboard');
             const [selectedOrder, setSelectedOrder] = useState(null);
@@ -1505,6 +1505,8 @@
             const handleLogin = (role) => {
                 setIsAuthenticated(true);
                 setIsAdmin(role === 'admin');
+                localStorage.setItem('bk_auth', 'true');
+                localStorage.setItem('bk_role', role);
             };
 
             // 수정: shouldNavigate 파라미터 추가 (기본값 true)
