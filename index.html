@@ -47,7 +47,7 @@
             LayoutDashboard, Plus, FileText, Calendar as CalendarIcon,
             Package, ChevronRight, ChevronLeft, Trash2, Edit3, Download,
             ChevronDown, ChevronUp, Wifi, ArrowRight, Phone, MapPin, Bell, X, Truck, 
-            Search, AlertCircle, Sparkles, Paperclip, File, Lock, Key, User, HardHat
+            Search, AlertCircle, Sparkles, Paperclip, File, Lock, Key, User, HardHat, MinusCircle
         } from 'lucide-react';
 
         // --- Firebase Imports ---
@@ -842,19 +842,22 @@
             const baseInfo = BASE_SUPPLIER_INFO[selectedSupplier];
             
             const [quickAdd, setQuickAdd] = useState(false);
-            const [newMat, setNewMat] = useState({ 
-                orderId: '', 
-                item: '', 
-                quantity: '', 
-                status: '발주', 
-                supplier: '', 
-                date: new Date().toISOString().split('T')[0] // 날짜 필드 초기화
+            
+            // --- 다중 입력 상태 관리 ---
+            const [batchHeader, setBatchHeader] = useState({
+                orderId: '',
+                supplier: '',
+                date: new Date().toISOString().split('T')[0]
             });
+            const [batchItems, setBatchItems] = useState([{ id: Date.now(), item: '', quantity: '' }]);
+            
             const [newSupplierInfo, setNewSupplierInfo] = useState({ phone: '', email: '', address: '' });
 
             useEffect(() => { 
                 if (selectedSupplier && !isCustomMode) {
-                    setNewMat(prev => ({ ...prev, supplier: selectedSupplier }));
+                    setBatchHeader(prev => ({ ...prev, supplier: selectedSupplier }));
+                } else if (isCustomMode) {
+                    setBatchHeader(prev => ({ ...prev, supplier: '' }));
                 }
             }, [selectedSupplier, isCustomMode]);
 
@@ -874,13 +877,34 @@
                 ? (suppliers[selectedSupplier] || []) 
                 : allMaterials;
 
-            const handleQuickAdd = async () => {
-                if (!newMat.item && !isCustomMode) return alert("품목을 입력하세요");
-                if (isCustomMode && !newMat.supplier) return alert("거래처명을 입력하세요.");
+            // 행 추가/삭제 함수
+            const addRow = () => {
+                setBatchItems([...batchItems, { id: Date.now() + Math.random(), item: '', quantity: '' }]);
+            };
+            
+            const removeRow = (id) => {
+                if (batchItems.length === 1) {
+                    setBatchItems([{ id: Date.now(), item: '', quantity: '' }]); // 마지막 하나는 내용만 초기화
+                } else {
+                    setBatchItems(batchItems.filter(i => i.id !== id));
+                }
+            };
+
+            const updateRow = (id, field, value) => {
+                setBatchItems(batchItems.map(i => i.id === id ? { ...i, [field]: value } : i));
+            };
+
+            const handleBatchAdd = async () => {
+                // 검증: 최소 1개 이상의 품목이 있거나, 커스텀 모드에서 거래처명은 필수
+                const validItems = batchItems.filter(i => i.item.trim() !== '');
                 
-                let targetOrder = orders.find(o => o.id === newMat.orderId);
+                if (validItems.length === 0 && !isCustomMode) return alert("품목을 최소 1개 이상 입력하세요");
+                if (isCustomMode && !batchHeader.supplier) return alert("거래처명을 입력하세요.");
                 
-                if (!targetOrder && !newMat.orderId) {
+                let targetOrder = orders.find(o => o.id === batchHeader.orderId);
+                
+                // 프로젝트 미선택 시 '기타 자재 발주' 자동 연결/생성
+                if (!targetOrder && !batchHeader.orderId) {
                     targetOrder = orders.find(o => o.itemName === '기타 자재 발주' && !['납품완료'].includes(o.status));
                     if (!targetOrder) {
                         targetOrder = {
@@ -895,39 +919,60 @@
                     }
                 }
 
-                const finalSupplier = isCustomMode ? newMat.supplier : selectedSupplier;
+                const finalSupplier = isCustomMode ? batchHeader.supplier : selectedSupplier;
                 
-                const isInfoRegistration = isCustomMode && !newMat.item;
-                const itemToSave = isInfoRegistration ? "거래처 정보" : newMat.item;
-                const quantityToSave = isInfoRegistration ? "-" : newMat.quantity;
-                const statusToSave = isInfoRegistration ? "정보" : "발주";
+                // 품목 없이 거래처 정보만 등록하는 경우 (isInfoRegistration)
+                const isInfoRegistration = isCustomMode && validItems.length === 0;
+                
+                const newMaterials = [];
 
-                const materialData = {
-                    id: Date.now(), 
-                    supplier: finalSupplier, 
-                    item: itemToSave,
-                    quantity: quantityToSave, 
-                    status: statusToSave, 
-                    date: newMat.date || new Date().toISOString().split('T')[0] // 사용자가 선택한 날짜 사용
-                };
-
-                if (isCustomMode) {
-                    materialData.supplierInfo = {
-                        ...newSupplierInfo,
-                        ...getMockCoordinates(newSupplierInfo.address)
-                    };
+                if (isInfoRegistration) {
+                    newMaterials.push({
+                        id: Date.now(),
+                        supplier: finalSupplier,
+                        item: "거래처 정보",
+                        quantity: "-",
+                        status: "정보",
+                        date: batchHeader.date,
+                        supplierInfo: {
+                            ...newSupplierInfo,
+                            ...getMockCoordinates(newSupplierInfo.address)
+                        }
+                    });
+                } else {
+                    // 유효한 항목들 추가
+                    validItems.forEach((itemData, index) => {
+                        const materialData = {
+                            id: Date.now() + index, 
+                            supplier: finalSupplier, 
+                            item: itemData.item,
+                            quantity: itemData.quantity, 
+                            status: "발주", 
+                            date: batchHeader.date
+                        };
+                        
+                        // 첫 번째 항목에만 상세 정보 추가 (중복 방지)
+                        if (isCustomMode && index === 0) {
+                            materialData.supplierInfo = {
+                                ...newSupplierInfo,
+                                ...getMockCoordinates(newSupplierInfo.address)
+                            };
+                        }
+                        newMaterials.push(materialData);
+                    });
                 }
 
-                const updatedMaterials = [...(targetOrder.materials || []), materialData];
+                const updatedMaterials = [...(targetOrder.materials || []), ...newMaterials];
                 
-                // 두번째 인자 false를 전달하여 화면 이동 방지
+                // 화면 이동 없이 업데이트
                 await onUpdateOrder({ ...targetOrder, materials: updatedMaterials }, false);
                 
+                // 초기화
                 setQuickAdd(false);
-                setNewMat({ ...newMat, item: '', quantity: '', date: new Date().toISOString().split('T')[0] }); // 날짜 리셋
+                setBatchItems([{ id: Date.now(), item: '', quantity: '' }]);
                 setNewSupplierInfo({ phone: '', email: '', address: '' });
-                if(isCustomMode) setSelectedSupplier(null); // 입력 후 전체 목록으로 복귀
-                alert(isInfoRegistration ? "거래처 정보가 등록되었습니다!" : "발주가 등록되었습니다!");
+                if(isCustomMode) setSelectedSupplier(null); 
+                alert(isInfoRegistration ? "거래처 정보가 등록되었습니다!" : `${newMaterials.length}건의 발주가 등록되었습니다!`);
             };
 
             const cycleStatus = (currentStatus) => {
@@ -942,7 +987,6 @@
                 if (order) {
                     const nextStatus = cycleStatus(m.status);
                     const updated = order.materials.map(x => x.id === m.id ? { ...x, status: nextStatus } : x);
-                    // 두번째 인자 false 전달하여 화면 이동 방지
                     await onUpdateOrder({ ...order, materials: updated }, false);
                 }
             };
@@ -952,7 +996,6 @@
                 const order = orders.find(o => o.id === m.orderId);
                 if(order) {
                     const updated = order.materials.filter(x => x.id !== m.id);
-                    // 화면 이동 방지
                     await onUpdateOrder({ ...order, materials: updated }, false);
                 }
             };
@@ -962,7 +1005,6 @@
                 const order = orders.find(o => o.id === editingMaterial.orderId);
                 if(order) {
                     const updated = order.materials.map(x => x.id === editingMaterial.id ? { ...x, ...editingMaterial } : x);
-                    // 화면 이동 방지
                     await onUpdateOrder({ ...order, materials: updated }, false);
                     setEditingMaterial(null);
                 }
@@ -1011,7 +1053,7 @@
                 )}
 
                 <div className="w-full md:w-1/3 overflow-y-auto space-y-2 pr-0 md:pr-2 max-h-[200px] md:max-h-full flex-shrink-0">
-                    <div onClick={() => { setIsCustomMode(true); setSelectedSupplier(null); setNewMat(prev=>({...prev, supplier: ''})); }} className={`p-3 border rounded-lg cursor-pointer transition-all flex items-center gap-2 ${isCustomMode ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
+                    <div onClick={() => { setIsCustomMode(true); setSelectedSupplier(null); setBatchHeader(prev=>({...prev, supplier: ''})); }} className={`p-3 border rounded-lg cursor-pointer transition-all flex items-center gap-2 ${isCustomMode ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
                     <Plus size={16} />
                     <span className="font-bold">직접 입력 (새 거래처)</span>
                     </div>
@@ -1039,7 +1081,7 @@
                     <div className="mb-4 pb-4 border-b flex-shrink-0">
                         <div className="flex justify-between items-start mb-2">
                         {isCustomMode ? (
-                            <input className="text-2xl font-bold border-b border-gray-300 focus:border-indigo-500 outline-none placeholder-gray-300 w-full" placeholder="거래처명 입력" value={newMat.supplier} onChange={e => setNewMat({...newMat, supplier: e.target.value})}/>
+                            <input className="text-2xl font-bold border-b border-gray-300 focus:border-indigo-500 outline-none placeholder-gray-300 w-full" placeholder="거래처명 입력" value={batchHeader.supplier} onChange={e => setBatchHeader({...batchHeader, supplier: e.target.value})}/>
                         ) : (
                             <h2 className="text-2xl font-bold truncate">{selectedSupplier || "전체 발주 내역"}</h2>
                         )}
@@ -1065,22 +1107,46 @@
                     {(quickAdd || isCustomMode) && (
                         <div className="mb-4 p-3 bg-indigo-50 rounded border border-indigo-100 animate-fade-in flex-shrink-0">
                         <div className="text-sm font-bold text-indigo-800 mb-2">새 자재 발주 / 거래처 등록</div>
-                        <div className="flex flex-col gap-2 mb-2">
-                             {/* 날짜 입력 추가 */}
+                        <div className="space-y-2 mb-3">
+                             {/* 공통 정보 입력 */}
                             <div className="flex gap-2">
-                                <input type="date" className="border p-2 rounded text-sm w-full" value={newMat.date} onChange={e => setNewMat({ ...newMat, date: e.target.value })} />
-                            </div>
-                            <div className="flex flex-col md:flex-row gap-2">
-                                <select className="border p-2 rounded flex-1 text-sm min-w-0" value={newMat.orderId} onChange={e => setNewMat({ ...newMat, orderId: e.target.value })}>
+                                <input type="date" className="border p-2 rounded text-sm w-1/3 min-w-[120px]" value={batchHeader.date} onChange={e => setBatchHeader({ ...batchHeader, date: e.target.value })} />
+                                <select className="border p-2 rounded flex-1 text-sm min-w-0" value={batchHeader.orderId} onChange={e => setBatchHeader({ ...batchHeader, orderId: e.target.value })}>
                                 <option value="">프로젝트 선택 (없으면 기타)</option>
                                 {orders.filter(o => !['납품완료'].includes(o.status)).map(o => <option key={o.id} value={o.id}>{o.itemName}</option>)}
                                 </select>
-                                <input placeholder={isCustomMode ? "품목명 (비워두면 정보만 저장)" : "품목명"} className="border p-2 rounded flex-1 text-sm min-w-0" value={newMat.item} onChange={e => setNewMat({ ...newMat, item: e.target.value })} />
-                                <input placeholder="수량" className="border p-2 rounded w-full md:w-20 text-sm" value={newMat.quantity} onChange={e => setNewMat({ ...newMat, quantity: e.target.value })} />
                             </div>
+                            
+                            {/* 다중 품목 입력 리스트 */}
+                            <div className="space-y-2">
+                                {batchItems.map((row, index) => (
+                                    <div key={row.id} className="flex gap-2 items-center animate-fade-in">
+                                        <span className="text-xs font-bold text-gray-400 w-4 text-center">{index + 1}</span>
+                                        <input 
+                                            placeholder={isCustomMode ? "품목명 (정보만 저장시 빈칸)" : "품목명"} 
+                                            className="border p-2 rounded flex-1 text-sm min-w-0" 
+                                            value={row.item} 
+                                            onChange={e => updateRow(row.id, 'item', e.target.value)} 
+                                        />
+                                        <input 
+                                            placeholder="수량" 
+                                            className="border p-2 rounded w-16 md:w-20 text-sm text-center" 
+                                            value={row.quantity} 
+                                            onChange={e => updateRow(row.id, 'quantity', e.target.value)} 
+                                        />
+                                        <button onClick={() => removeRow(row.id)} className="text-gray-400 hover:text-red-500">
+                                            <X size={18} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            <button onClick={addRow} className="text-xs text-indigo-600 font-bold flex items-center gap-1 hover:underline mt-1">
+                                <Plus size={14}/> 품목 추가하기
+                            </button>
                         </div>
-                        <button onClick={handleQuickAdd} className="w-full bg-indigo-600 text-white py-2 rounded text-sm font-bold hover:bg-indigo-700">
-                            {isCustomMode && !newMat.item ? "거래처 정보만 등록" : "등록하기"}
+                        <button onClick={handleBatchAdd} className="w-full bg-indigo-600 text-white py-2 rounded text-sm font-bold hover:bg-indigo-700">
+                            {isCustomMode && batchItems.every(i => !i.item) ? "거래처 정보만 등록" : "일괄 등록하기"}
                         </button>
                         </div>
                     )}
