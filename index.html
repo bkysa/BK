@@ -45,10 +45,9 @@
         import { createRoot } from 'react-dom/client';
         import {
             LayoutDashboard, Plus, FileText, Calendar as CalendarIcon,
-            Package, ChevronRight, ChevronLeft, Trash2, Edit3, Download, Link as LinkIcon,
-            ChevronDown, ChevronUp, Wifi, Mail, CheckCircle2, Factory, ArrowRight,
-            Phone, MapPin, Bell, X, Truck, Search, AlertCircle, Map, Sparkles, Paperclip, File, Lock, Key, User, HardHat,
-            MoreHorizontal, Save
+            Package, ChevronRight, ChevronLeft, Trash2, Edit3, Download,
+            ChevronDown, ChevronUp, Wifi, ArrowRight, Phone, MapPin, Bell, X, Truck, 
+            Search, AlertCircle, Sparkles, Paperclip, File, Lock, Key, User, HardHat
         } from 'lucide-react';
 
         // --- Firebase Imports ---
@@ -550,7 +549,8 @@
                 if (m.status === '정보') return; // 정보 타입은 상태 변경 불가
                 const nextStatus = cycleStatus(m.status);
                 const updated = order.materials.map(x => x.id === m.id ? { ...x, status: nextStatus } : x);
-                updateOrder({ materials: updated });
+                // 상세 페이지에서 자재 상태 변경 시에는 화면 이동 안함 (두번째 인자 false)
+                onUpdate({ materials: updated }, null, false);
             };
 
             return (
@@ -671,7 +671,8 @@
                                 </div>
                                 <button onClick={()=>{
                                     if(!mat.supplier || !mat.item) return;
-                                    onUpdate({ materials: [...(order.materials||[]), {...mat, id:Date.now()}] });
+                                    // 상세화면에서 자재 추가시 화면이동 안함
+                                    onUpdate({ materials: [...(order.materials||[]), {...mat, id:Date.now()}] }, null, false);
                                     setMat({...mat, supplier:'', item:'', quantity:''});
                                     setShowSuggestions(false);
                                 }} className="bg-slate-800 text-white px-4 py-2 rounded text-sm font-bold w-full">추가</button>
@@ -827,7 +828,7 @@
                         </div>
                         <div className="flex justify-end gap-2 pt-4 border-t">
                             {order && <button onClick={()=>onDelete(order.id)} className="text-red-500 text-sm font-bold px-4">삭제</button>}
-                            <button onClick={()=>onSave(data)} className="bg-slate-800 text-white px-6 py-2 rounded font-bold">저장</button>
+                            <button onClick={()=>onSave(data, true)} className="bg-slate-800 text-white px-6 py-2 rounded font-bold">저장</button>
                         </div>
                     </Card>
                 </div>
@@ -911,7 +912,9 @@
                 }
 
                 const updatedMaterials = [...(targetOrder.materials || []), materialData];
-                await onUpdateOrder({ ...targetOrder, materials: updatedMaterials });
+                
+                // 두번째 인자 false를 전달하여 화면 이동 방지
+                await onUpdateOrder({ ...targetOrder, materials: updatedMaterials }, false);
                 
                 setQuickAdd(false);
                 setNewMat({ ...newMat, item: '', quantity: '' });
@@ -932,7 +935,8 @@
                 if (order) {
                     const nextStatus = cycleStatus(m.status);
                     const updated = order.materials.map(x => x.id === m.id ? { ...x, status: nextStatus } : x);
-                    await onUpdateOrder({ ...order, materials: updated });
+                    // 두번째 인자 false 전달하여 화면 이동 방지
+                    await onUpdateOrder({ ...order, materials: updated }, false);
                 }
             };
 
@@ -941,7 +945,8 @@
                 const order = orders.find(o => o.id === m.orderId);
                 if(order) {
                     const updated = order.materials.filter(x => x.id !== m.id);
-                    await onUpdateOrder({ ...order, materials: updated });
+                    // 화면 이동 방지
+                    await onUpdateOrder({ ...order, materials: updated }, false);
                 }
             };
 
@@ -950,7 +955,8 @@
                 const order = orders.find(o => o.id === editingMaterial.orderId);
                 if(order) {
                     const updated = order.materials.map(x => x.id === editingMaterial.id ? { ...x, ...editingMaterial } : x);
-                    await onUpdateOrder({ ...order, materials: updated });
+                    // 화면 이동 방지
+                    await onUpdateOrder({ ...order, materials: updated }, false);
                     setEditingMaterial(null);
                 }
             };
@@ -966,10 +972,10 @@
             return (
                 <div className="flex h-full gap-4 animate-fade-in flex-col md:flex-row overflow-hidden relative">
                 
-                {/* 수정 모달 */}
+                {/* 수정 모달 (fixed로 변경하여 잘림 방지) */}
                 {editingMaterial && (
-                    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
-                        <Card className="w-full max-w-sm p-4 shadow-xl border-indigo-200">
+                    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
+                        <Card className="w-full max-w-sm p-4 shadow-xl border-indigo-200 bg-white" onClick={e=>e.stopPropagation()}>
                             <h3 className="font-bold text-lg mb-3 flex items-center gap-2"><Edit3 size={18}/> 자재 수정</h3>
                             <div className="space-y-3">
                                 <div>
@@ -1129,11 +1135,13 @@
                     {days.map((d, i) => {
                         if (!d) return <div key={i} className="bg-slate-50 border-r border-b"></div>;
                         const dateStr = d.toISOString().split('T')[0];
-                        // 수정: 완료된 작업은 완료일 기준, 진행중인 작업은 마감일 기준으로 달력에 표시
+                        
+                        // 완료된 작업은 실제 완료일(completedDate) 기준, 미완료는 납품일(deliveryDate) 기준 표시
                         const events = orders.filter(o => {
-                            const targetDate = (['작업완료', '납품완료'].includes(o.status) && o.completedDate) 
-                                ? o.completedDate 
-                                : o.deliveryDate;
+                            let targetDate = o.deliveryDate;
+                            if (['작업완료', '납품완료'].includes(o.status) && o.completedDate) {
+                                targetDate = o.completedDate;
+                            }
                             return targetDate === dateStr;
                         });
                         
@@ -1266,13 +1274,17 @@
                 setIsAdmin(role === 'admin');
             };
 
-            const saveOrder = async (data) => {
+            // 수정: shouldNavigate 파라미터 추가 (기본값 true)
+            const saveOrder = async (data, shouldNavigate = true) => {
                 if (!isOnline || !db) {
                     alert("현재 오프라인 상태이거나 권한이 없어 임시 저장만 가능합니다.");
                     if(data.id && !data.id.startsWith('mock')) setOrders(orders.map(o=>o.id===data.id?data:o));
                     else setOrders([...orders, {...data, id: `mock-new-${Date.now()}`, displayId: `ORD-TEMP`, createdAt: new Date().toISOString()}]);
-                    setCurrentView('list');
-                    setSelectedOrder(null);
+                    
+                    if(shouldNavigate) {
+                        setCurrentView('list');
+                        setSelectedOrder(null);
+                    }
                     return;
                 }
                 try {
@@ -1284,8 +1296,11 @@
                         const displayId = `ORD-24-${Math.floor(100 + Math.random() * 900)}`;
                         await addDoc(col, { ...rest, displayId, createdAt: serverTimestamp(), userId: user?.uid });
                     }
-                    setCurrentView('list');
-                    setSelectedOrder(null);
+                    
+                    if(shouldNavigate) {
+                        setCurrentView('list');
+                        setSelectedOrder(null);
+                    }
                 } catch (e) {
                     alert("저장 실패: " + e.message);
                 }
@@ -1402,8 +1417,8 @@
                                 {currentView === 'dashboard' && <Dashboard orders={orders} stats={stats} suppliers={suppliers} onNavigate={handleNavigate} isAdmin={isAdmin} currentUserId={user?.uid} />}
                                 {currentView === 'calendar' && <CalendarView orders={orders} onSelect={handleNavigate} />}
                                 {currentView === 'list' && !selectedOrder && <ListView orders={orders} onSelect={handleNavigate} onAdd={() => { setSelectedOrder(null); setCurrentView('form'); }} />}
-                                {currentView === 'detail' && <DetailView order={selectedOrder} onBack={() => { setSelectedOrder(null); setCurrentView('list'); }} onUpdate={(data, view) => { if(view) setCurrentView(view); else saveOrder(data); }} isAdmin={isAdmin} currentUserId={user?.uid} />}
-                                {currentView === 'form' && <FormView order={selectedOrder} onSave={saveOrder} onDelete={deleteOrder} onCancel={() => { setSelectedOrder(null); setCurrentView('list'); }} isAdmin={isAdmin} currentUserId={user?.uid} />}
+                                {currentView === 'detail' && <DetailView order={selectedOrder} onBack={() => { setSelectedOrder(null); setCurrentView('list'); }} onUpdate={(data, view, navigate) => { if(view) setCurrentView(view); else saveOrder(data, navigate); }} isAdmin={isAdmin} currentUserId={user?.uid} />}
+                                {currentView === 'form' && <FormView order={selectedOrder} onSave={(data) => saveOrder(data, true)} onDelete={deleteOrder} onCancel={() => { setSelectedOrder(null); setCurrentView('list'); }} isAdmin={isAdmin} currentUserId={user?.uid} />}
                                 {currentView === 'materials' && <MaterialManageView suppliers={suppliers} orders={orders} onUpdateOrder={saveOrder} />}
                             </div>
                         </div>
