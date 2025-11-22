@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>숨쉬는 깡통</title>
+    <title>숨쉬는 깡통 - 통합 관리 시스템</title>
     
     <!-- 1. Tailwind CSS (디자인) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -49,7 +49,7 @@
             LayoutDashboard, Plus, FileText, Calendar as CalendarIcon,
             Package, ChevronRight, ChevronLeft, Trash2, Edit3, Download, Link as LinkIcon,
             ChevronDown, ChevronUp, Wifi, Mail, CheckCircle2, Factory, ArrowRight,
-            Phone, MapPin, Bell, X, Truck, Search, AlertCircle, Map, Sparkles, Paperclip, File, Lock, Key, User, Hammer, Truck as TruckIcon
+            Phone, MapPin, Bell, X, Truck, Search, AlertCircle, Map, Sparkles, Paperclip, File, Lock, Key
         } from 'lucide-react';
 
         // --- Firebase Imports ---
@@ -111,12 +111,25 @@
             mapUrl: 'https://map.naver.com/p/search/경기도 포천시 군내면 유교리 243-7'
         };
 
-        // 기본 거래처 정보 (수정 불가)
+        // 기본 거래처 정보
         const DEFAULT_SUPPLIERS = {
             '성수금속': { phone: '02-1234-5678', address: '서울 성동구 성수이로 123', lat: 37.5445, lng: 127.0560 },
             '을지레이저': { phone: '02-2222-3333', address: '서울 중구 을지로 4가 56', lat: 37.5660, lng: 126.9950 },
             '청계도장': { phone: '02-3333-4444', address: '서울 중구 청계천로 789', lat: 37.5690, lng: 127.0100 }
         };
+
+        // 오프라인용 더미 데이터
+        const MOCK_DATA = [
+            {
+                id: 'local-init',
+                itemName: '시스템 초기화 안내',
+                clientName: '시스템',
+                status: '작업중',
+                deliveryDate: new Date().toISOString().split('T')[0],
+                description: '서버 연결 전 로컬 모드로 실행되었습니다.',
+                materials: []
+            }
+        ];
 
         // --- Helper Function ---
         const getDistance = (lat1, lon1, lat2, lon2) => {
@@ -155,8 +168,53 @@
             <div onClick={onClick} className={`bg-white rounded-xl shadow-sm border border-slate-200 ${className}`}>{children}</div>
         );
 
-        // --- Sub Components ---
+        const FileBox = ({size}) => <Package size={size}/>;
 
+        // --- Login Gate ---
+        const LoginView = ({ onLogin }) => {
+            const [code, setCode] = useState('');
+            const [error, setError] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (code === '4545') onLogin('employee');
+                else if (code === '2203') onLogin('admin');
+                else setError('인증 코드가 올바르지 않습니다.');
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+                    <Card className="w-full max-w-md p-8 space-y-6 shadow-xl">
+                        <div className="text-center space-y-2">
+                            <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Lock className="text-indigo-600" size={32} />
+                            </div>
+                            <h1 className="text-2xl font-bold text-slate-800">숨쉬는 깡통 관리 시스템</h1>
+                            <p className="text-slate-500">회사 인증 코드를 입력해주세요.</p>
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <input 
+                                    type="password" 
+                                    value={code}
+                                    onChange={(e) => {setCode(e.target.value); setError('');}}
+                                    placeholder="인증 코드 (4자리)"
+                                    className="w-full text-center text-2xl tracking-widest p-3 border-2 border-slate-200 rounded-xl focus:border-indigo-500 outline-none"
+                                    maxLength={4}
+                                    autoFocus
+                                />
+                                {error && <p className="text-red-500 text-sm text-center mt-2 font-bold">{error}</p>}
+                            </div>
+                            <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                                <Key size={20}/> 입장하기
+                            </button>
+                        </form>
+                    </Card>
+                </div>
+            );
+        };
+
+        // --- Main Components ---
         const Dashboard = ({ orders, stats, suppliers, onNavigate }) => {
             const [aiBriefing, setAiBriefing] = useState(null);
             const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false);
@@ -178,9 +236,7 @@
                 setIsGeneratingBriefing(false);
             };
 
-            // Route Logic (주소가 있는 거래처만 포함)
             const optimizedRoute = useMemo(() => {
-                // 회수대기 상태인 자재가 있는 거래처들
                 const targetNames = Object.keys(suppliers).filter(name => 
                     suppliers[name].items.some(m => m.status === '회수대기')
                 );
@@ -191,15 +247,13 @@
                     const info = suppliers[name].info;
                     return {
                         name,
-                        lat: info?.lat || 37.5, // 좌표 없으면 서울 중심 임시값
+                        lat: info?.lat || 37.5,
                         lng: info?.lng || 127.0,
-                        hasLoc: !!info?.lat,
                         count: suppliers[name].items.filter(m => m.status === '회수대기').length
                     };
                 });
 
                 const route = [];
-                // 좌표가 있는 곳들만 정렬 (단순 거리 계산)
                 while (unvisited.length > 0) {
                     let nearest = null;
                     let minDist = Infinity;
@@ -242,7 +296,6 @@
                         </Card>
                     </div>
 
-                    {/* AI Briefing */}
                     {aiBriefing && (
                         <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-lg relative animate-fade-in">
                             <h3 className="font-bold text-indigo-800 flex items-center gap-2 mb-2"><Sparkles size={16} className="text-yellow-500"/> AI 요약 브리핑</h3>
@@ -256,7 +309,6 @@
                         </button>
                     )}
 
-                    {/* Urgent Tasks List */}
                     <div>
                         <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><AlertCircle size={18} className="text-red-500"/> 긴급 / 진행 중 작업</h3>
                         <div className="space-y-3">
@@ -279,7 +331,6 @@
                         </div>
                     </div>
 
-                    {/* Route Info */}
                     <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5">
                         <div className="flex items-center gap-2 text-indigo-900 font-bold mb-3"><Truck size={20} /><h3>자재 회수 추천 동선</h3></div>
                         {optimizedRoute.length > 0 ? (
@@ -296,7 +347,7 @@
                             <ArrowRight size={14} className="text-indigo-300" />
                             <span className="text-xs bg-white px-2 py-1 rounded border font-bold">복귀</span>
                         </div>
-                        ) : <div className="text-sm text-indigo-400">현재 회수 대기 중인 자재가 없거나 위치 정보가 부족합니다.</div>}
+                        ) : <div className="text-sm text-indigo-400">회수 대기 중인 자재가 없습니다.</div>}
                     </div>
                 </div>
             );
@@ -304,9 +355,7 @@
 
         const DetailView = ({ order, onBack, onUpdate, isAdmin }) => {
             if (!order) return null;
-            const [mat, setMat] = useState({ supplier: '', item: '', quantity: '', status: '발주', date: new Date().toISOString().split('T')[0] });
 
-            // Status Toggler for Materials
             const toggleMatStatus = (m) => {
                 const statusFlow = { '발주': '회수대기', '회수대기': '회수완료', '회수완료': '발주' };
                 const nextStatus = statusFlow[m.status] || '발주';
@@ -384,13 +433,11 @@
                     <div onClick={onCancel} className="mb-4 cursor-pointer text-slate-500 font-bold flex items-center gap-1"><ChevronLeft size={18}/> 취소</div>
                     <Card className="p-6 space-y-5">
                         <h2 className="text-2xl font-bold">{order ? '작업 수정' : '새 작업 등록'}</h2>
-                        
                         <div className="grid gap-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 mb-1">작업명 <span className="text-red-500">*</span></label>
                                 <input className="border p-2 rounded w-full font-bold" value={data.itemName} onChange={e=>setData({...data, itemName:e.target.value})} placeholder="예: 성수동 카페 철제 파티션"/>
                             </div>
-
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-1">담당자 (설계)</label>
@@ -401,7 +448,6 @@
                                     <input className="border p-2 rounded w-full" value={data.worker} onChange={e=>setData({...data, worker:e.target.value})} placeholder="제작 담당자"/>
                                 </div>
                             </div>
-
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-1">발주받은 날 (시작)</label>
@@ -412,7 +458,6 @@
                                     <input type="date" className="border p-2 rounded w-full font-bold text-red-600" value={data.deliveryDate} onChange={e=>setData({...data, deliveryDate:e.target.value})}/>
                                 </div>
                             </div>
-
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-1">클라이언트 (업체명)</label>
@@ -423,12 +468,10 @@
                                     <input className="border p-2 rounded w-full" value={data.clientContact} onChange={e=>setData({...data, clientContact:e.target.value})}/>
                                 </div>
                             </div>
-
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 mb-1">납품/시공 주소</label>
                                 <input className="border p-2 rounded w-full" value={data.deliveryAddress} onChange={e=>setData({...data, deliveryAddress:e.target.value})} placeholder="주소 입력"/>
                             </div>
-
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 mb-1">진행 상태</label>
                                 <select className="border p-2 rounded w-full font-bold" value={data.status} onChange={e=>setData({...data, status:e.target.value})}>
@@ -439,7 +482,6 @@
                                     <option>납품완료</option>
                                 </select>
                             </div>
-
                             <div>
                                 <div className="flex justify-between items-center mb-1">
                                     <label className="block text-xs font-bold text-slate-500">작업 메모 / 특이사항</label>
@@ -448,7 +490,6 @@
                                 <textarea className="border p-2 rounded w-full h-24" value={data.description} onChange={e=>setData({...data, description:e.target.value})}/>
                             </div>
                         </div>
-
                         <div className="flex justify-end gap-2 pt-4 border-t">
                             {order && <button onClick={()=>onDelete(order.id)} className="text-red-500 px-4 py-2 rounded font-bold text-sm hover:bg-red-50">삭제</button>}
                             <button onClick={()=>onSave(data)} className="bg-slate-800 text-white px-6 py-2 rounded font-bold hover:bg-slate-900">저장</button>
@@ -459,7 +500,7 @@
         };
 
         const MaterialManageView = ({ suppliers, orders, onUpdateOrder }) => {
-            const [mode, setMode] = useState('list'); // list or form
+            const [mode, setMode] = useState('list'); 
             const [newSupplier, setNewSupplier] = useState({ name: '', phone: '', email: '', address: '' });
             const [itemData, setItemData] = useState({ orderId: '', item: '', quantity: '' });
 
@@ -467,21 +508,12 @@
                 if (!newSupplier.name || !itemData.item) return alert('거래처명과 품목은 필수입니다.');
                 
                 let targetOrder = orders.find(o => o.id === itemData.orderId);
-                // '기타 발주'용 더미 오더 생성 로직은 생략하고, 기존 오더에만 추가하도록 간소화 (또는 기타 오더 자동생성)
-                if (!targetOrder && itemData.orderId === '') {
-                     // 기타 오더가 없으면 생성 로직 필요하지만 여기선 기존 오더 필수라고 가정
-                     return alert("발주할 관련 작업을 선택해주세요.");
-                }
+                if (!targetOrder) return alert("발주할 관련 작업을 선택해주세요.");
 
                 const material = {
                     id: Date.now(),
                     supplier: newSupplier.name,
-                    supplierInfo: { // 거래처 정보 저장 (회수 동선용)
-                        phone: newSupplier.phone,
-                        address: newSupplier.address,
-                        email: newSupplier.email,
-                        lat: null, lng: null // 주소 기반 좌표는 API 필요. 여기선 저장만.
-                    },
+                    supplierInfo: { ...newSupplier },
                     item: itemData.item,
                     quantity: itemData.quantity,
                     status: '발주',
@@ -538,7 +570,6 @@
                         </Card>
                     )}
 
-                    {/* Material List */}
                     <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
                         <table className="w-full text-sm text-left">
                             <thead className="bg-slate-50 border-b"><tr><th className="p-3">상태 (클릭)</th><th className="p-3">거래처</th><th className="p-3">품목</th><th className="p-3 hidden md:table-cell">관련 작업</th><th className="p-3 hidden md:table-cell">주소/연락처</th></tr></thead>
@@ -593,23 +624,28 @@
 
         const CalendarView = () => <div className="text-center p-10 text-gray-400">일정 보기 (준비중)</div>;
 
-        // --- Main App ---
-
+        // --- App ---
         function App() {
             const [user, setUser] = useState(null);
             const [orders, setOrders] = useState([]);
             const [loading, setLoading] = useState(true);
-            const [isOnline, setIsOnline] = useState(true); // Default true, change if fails
+            const [isOnline, setIsOnline] = useState(true);
             const [isAuthenticated, setIsAuthenticated] = useState(false);
             const [isAdmin, setIsAdmin] = useState(false);
             const [currentView, setCurrentView] = useState('dashboard');
             const [selectedOrder, setSelectedOrder] = useState(null);
-
-            // Urgent Notifications Logic
             const [showNoti, setShowNoti] = useState(false);
             const urgentCount = orders.filter(o => o.deliveryDate && !['납품완료'].includes(o.status) && Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2).length;
 
-            // Firebase Init
+            // Define Local Logic Before Effect
+            const saveLocal = (data) => localStorage.setItem('bk_orders', JSON.stringify(data));
+            const loadLocal = () => {
+                const saved = localStorage.getItem('bk_orders');
+                if (saved) setOrders(JSON.parse(saved));
+                else setOrders(MOCK_DATA);
+                setLoading(false);
+            };
+
             const { auth, db, appId } = useMemo(() => {
                 try {
                     const app = initializeApp(firebaseConfig);
@@ -617,23 +653,30 @@
                 } catch (e) { return { auth: null, db: null, appId: null }; }
             }, []);
 
-            // Auth & Data Logic (with LocalStorage Fallback)
+            // Auth Logic (Fixed: No Crash on Null Auth)
             useEffect(() => {
                 const init = async () => {
                     if (!auth) return loadLocal();
                     try {
                         await signInAnonymously(auth);
                     } catch (e) {
-                        console.warn("Auth failed, using local storage");
+                        console.warn("Auth Error:", e);
                         setIsOnline(false);
                         loadLocal();
                     }
                 };
                 init();
-                onAuthStateChanged(auth, u => {
-                    setUser(u);
-                    if(!u) setIsOnline(false);
-                });
+
+                if (auth) {
+                    const unsub = onAuthStateChanged(auth, u => {
+                        setUser(u);
+                        if (!u) setIsOnline(false);
+                    });
+                    return () => unsub();
+                } else {
+                    setIsOnline(false);
+                    loadLocal();
+                }
             }, [auth]);
 
             // Data Sync
@@ -644,10 +687,10 @@
                     const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     setOrders(data);
                     setIsOnline(true);
-                    saveLocal(data); // Sync to local backup
+                    saveLocal(data);
                     setLoading(false);
                 }, (err) => {
-                    console.warn("Firestore failed, switching to local:", err);
+                    console.warn("Firestore Error:", err);
                     setIsOnline(false);
                     loadLocal();
                     setLoading(false);
@@ -655,43 +698,30 @@
                 return () => unsub();
             }, [user, db, appId]);
 
-            // Local Storage Helpers
-            const saveLocal = (data) => localStorage.setItem('bk_orders', JSON.stringify(data));
-            const loadLocal = () => {
-                const saved = localStorage.getItem('bk_orders');
-                if (saved) setOrders(JSON.parse(saved));
-                else setOrders(MOCK_DATA);
-                setLoading(false);
-            };
-
             const handleLogin = (role) => {
                 setIsAuthenticated(true);
                 setIsAdmin(role === 'admin');
             };
 
-            // CRUD (Auto fallback to Local)
             const saveOrder = async (data) => {
                 const newOrders = data.id && !data.id.startsWith('local') 
                     ? orders.map(o => o.id === data.id ? data : o)
                     : [{ ...data, id: data.id || `local-${Date.now()}`, createdAt: new Date().toISOString() }, ...orders];
-                
-                // 1. Update UI & Local immediately
                 setOrders(newOrders);
                 saveLocal(newOrders);
                 setCurrentView('list');
                 setSelectedOrder(null);
 
-                // 2. Try Server
                 if (isOnline && db) {
                     try {
                         const col = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
                         if (data.id && !data.id.startsWith('local')) {
                             await updateDoc(doc(col, data.id), { ...data, updatedAt: serverTimestamp() });
                         } else {
-                            const { id, ...rest } = data; // remove local id
+                            const { id, ...rest } = data; 
                             await addDoc(col, { ...rest, createdAt: serverTimestamp() });
                         }
-                    } catch (e) { console.error("Save to server failed:", e); }
+                    } catch (e) { console.error("Cloud Save Error:", e); }
                 }
             };
 
@@ -707,20 +737,19 @@
                 }
             };
 
-            // Computed Suppliers
             const suppliers = useMemo(() => {
                 const s = {};
-                // 기본 거래처 추가
                 Object.keys(DEFAULT_SUPPLIERS).forEach(k => {
                     s[k] = { info: DEFAULT_SUPPLIERS[k], items: [] };
                 });
-                // 주문에서 거래처 정보 추출
                 orders.forEach(o => (o.materials || []).forEach(m => {
-                    if (!s[m.supplier]) s[m.supplier] = { info: m.supplierInfo, items: [] };
+                    if (!s[m.supplier]) s[m.supplier] = { info: m.supplierInfo || {}, items: [] };
                     s[m.supplier].items.push(m);
                 }));
                 return s;
             }, [orders]);
+
+            const handleNavigate = (o) => { setSelectedOrder(o); setCurrentView('detail'); };
 
             if (!isAuthenticated) return <LoginView onLogin={handleLogin} />;
             if (loading) return <div className="flex h-screen items-center justify-center bg-slate-100"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-800"></div></div>;
@@ -756,7 +785,6 @@
 
                     {/* Main Content */}
                     <main className="flex-1 flex flex-col overflow-hidden relative bg-slate-100">
-                        {/* Top Header */}
                         <header className="h-16 bg-white border-b flex items-center justify-between px-6 shadow-sm flex-shrink-0 z-20">
                             <h2 className="font-bold text-xl text-slate-800">
                                 {currentView === 'dashboard' && '현황 대시보드'}
@@ -766,14 +794,11 @@
                                 {currentView === 'detail' && '작업 상세 정보'}
                                 {currentView === 'form' && '작업 등록/수정'}
                             </h2>
-                            
-                            {/* Urgent Notification Icon */}
                             <div className="relative">
                                 <button onClick={()=>setShowNoti(!showNoti)} className="p-2 hover:bg-slate-100 rounded-full relative transition-colors">
                                     <Bell size={22} className={urgentCount > 0 ? "text-slate-700 animate-bounce-slight" : "text-slate-400"}/>
                                     {urgentCount > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>}
                                 </button>
-                                
                                 {showNoti && (
                                     <>
                                     <div className="fixed inset-0 z-10" onClick={()=>setShowNoti(false)}></div>
@@ -781,10 +806,7 @@
                                         <div className="p-3 bg-slate-50 border-b font-bold text-sm text-slate-600">마감 임박 작업 ({urgentCount})</div>
                                         <div className="max-h-64 overflow-y-auto">
                                             {orders.filter(o => o.deliveryDate && !['납품완료'].includes(o.status) && Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2).map(o => (
-                                                <div key={o.id} className="p-3 border-b hover:bg-indigo-50 cursor-pointer flex justify-between items-center" onClick={()=>{
-                                                    handleNavigate(o);
-                                                    setShowNoti(false);
-                                                }}>
+                                                <div key={o.id} className="p-3 border-b hover:bg-indigo-50 cursor-pointer flex justify-between items-center" onClick={()=>{ handleNavigate(o); setShowNoti(false); }}>
                                                     <div className="text-sm font-bold text-slate-700 truncate w-40">{o.itemName}</div>
                                                     <div className="text-xs font-bold text-red-500">{o.deliveryDate} 까지</div>
                                                 </div>
@@ -796,7 +818,6 @@
                                 )}
                             </div>
                         </header>
-
                         <div className="flex-1 overflow-y-auto p-4 md:p-8">
                             <div className="max-w-6xl mx-auto">
                                 {currentView === 'dashboard' && <Dashboard orders={orders} stats={stats} suppliers={suppliers} onNavigate={handleNavigate} />}
