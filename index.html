@@ -194,12 +194,14 @@
 
         const StatusBadge = ({ status }) => {
             const colors = {
+                '설계중': 'bg-gray-100 text-gray-600 border border-gray-300',
+                '작업중': 'bg-blue-100 text-blue-700 border border-blue-200',
+                '도장/마감중': 'bg-purple-100 text-purple-700 border border-purple-200',
+                '납품대기': 'bg-teal-100 text-teal-700 border border-teal-200 font-bold',
+                '납품완료': 'bg-slate-200 text-slate-500 line-through border border-slate-300',
+                // Legacy support
                 '대기': 'bg-gray-100 text-gray-600',
-                '설계중': 'bg-blue-100 text-blue-700',
-                '작업중': 'bg-amber-100 text-amber-700',
-                '도장/마감중': 'bg-purple-100 text-purple-700',
-                '작업완료': 'bg-teal-100 text-teal-700 font-bold',
-                '납품완료': 'bg-slate-200 text-slate-500 line-through',
+                '작업완료': 'bg-teal-100 text-teal-700',
             };
             return <span className={`flex-shrink-0 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap ${colors[status] || 'bg-gray-100'}`}>{status}</span>;
         };
@@ -369,21 +371,42 @@
                     }));
                     return list;
                 }
-                return orders.filter(o => {
-                    if (activeStat === 'ongoing') return !['납품완료', '작업완료'].includes(o.status);
-                    if (activeStat === 'urgent') {
-                        if (!o.deliveryDate || ['납품완료', '작업완료'].includes(o.status)) return false;
-                        return Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2;
-                    }
-                    if (activeStat === 'completed') {
-                        const isDone = ['납품완료', '작업완료'].includes(o.status);
-                        const oneMonthAgo = new Date();
-                        oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
-                        const delDate = new Date(o.deliveryDate);
-                        return isDone && delDate >= oneMonthAgo;
-                    }
-                    return false;
-                });
+                
+                // 우선순위 정의: 작업중 > 도장/마감중 > 납품대기 > 설계중
+                const priority = {
+                    '작업중': 1,
+                    '도장/마감중': 2,
+                    '납품대기': 3,
+                    '설계중': 4
+                };
+
+                return orders
+                    .filter(o => {
+                        if (activeStat === 'ongoing') {
+                            // 납품완료, 작업완료(구) 제외 + '기타 자재 발주' 제외
+                            return !['납품완료', '작업완료'].includes(o.status) && o.itemName !== '기타 자재 발주';
+                        }
+                        if (activeStat === 'urgent') {
+                            if (!o.deliveryDate || ['납품완료', '작업완료'].includes(o.status)) return false;
+                            return Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2;
+                        }
+                        if (activeStat === 'completed') {
+                            const isDone = ['납품완료', '작업완료'].includes(o.status);
+                            const oneMonthAgo = new Date();
+                            oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+                            const delDate = new Date(o.deliveryDate);
+                            return isDone && delDate >= oneMonthAgo;
+                        }
+                        return false;
+                    })
+                    .sort((a, b) => {
+                        if (activeStat === 'ongoing') {
+                            const pa = priority[a.status] || 99;
+                            const pb = priority[b.status] || 99;
+                            return pa - pb;
+                        }
+                        return 0;
+                    });
             }, [activeStat, orders]);
 
             return (
@@ -513,7 +536,7 @@
             const groups = { design: [], prod: [], done: [] };
             
             orders.filter(o => (o.itemName || '').toLowerCase().includes(searchTerm.toLowerCase())).forEach(o => {
-                if (['대기', '설계중'].includes(o.status)) groups.design.push(o);
+                if (['설계중'].includes(o.status)) groups.design.push(o);
                 else if (['작업중', '도장/마감중'].includes(o.status)) groups.prod.push(o);
                 else groups.done.push(o);
             });
@@ -557,7 +580,7 @@
                 </div>
                 <Section id="design" title="설계 단계" items={groups.design} />
                 <Section id="prod" title="제작/마감 단계" items={groups.prod} />
-                <Section id="done" title="완료" items={groups.done} />
+                <Section id="done" title="납품 대기/완료" items={groups.done} />
                 </div>
             );
         };
@@ -616,10 +639,10 @@
                              <div><div className="text-gray-400 text-xs uppercase mb-1">Ordered</div><div className="font-bold">{order.orderDate}</div></div>
                              <div>
                                 <div className="text-gray-400 text-xs uppercase mb-1">
-                                    {['납품완료', '작업완료'].includes(order.status) ? 'Completed' : 'Deadline'}
+                                    {['납품완료', '납품대기'].includes(order.status) ? 'Completed' : 'Deadline'}
                                 </div>
-                                <div className={`font-bold ${['납품완료', '작업완료'].includes(order.status) ? 'text-blue-600' : 'text-red-600'}`}>
-                                    {['납품완료', '작업완료'].includes(order.status) && order.completedDate ? order.completedDate : order.deliveryDate}
+                                <div className={`font-bold ${['납품완료', '납품대기'].includes(order.status) ? 'text-blue-600' : 'text-red-600'}`}>
+                                    {['납품완료', '납품대기'].includes(order.status) && order.completedDate ? order.completedDate : order.deliveryDate}
                                 </div>
                              </div>
                         </div>
@@ -728,7 +751,7 @@
                 orderDate: new Date().toISOString().split('T')[0], 
                 deliveryDate: '', 
                 completedDate: '', // 초기값 설정
-                status: '대기', description: '', clientContact: '', files: []
+                status: '설계중', description: '', clientContact: '', files: []
             });
             const [isAiSuggesting, setIsAiSuggesting] = useState(false);
             const fileInputRef = useRef(null);
@@ -737,7 +760,7 @@
 
             // 완료 상태일 때 기본 완료일이 없으면 오늘 날짜로 설정
             useEffect(() => {
-                if (['납품완료', '작업완료'].includes(data.status) && !data.completedDate) {
+                if (['납품완료', '납품대기'].includes(data.status) && !data.completedDate) {
                     setData(prev => ({ ...prev, completedDate: new Date().toISOString().split('T')[0] }));
                 }
             }, [data.status]);
@@ -817,17 +840,16 @@
                             <div>
                                 <label className="text-xs font-bold text-gray-500">진행 상태</label>
                                 <select className="border p-2 rounded w-full" value={data.status} onChange={e=>setData({...data, status:e.target.value})}>
-                                    <option>대기</option>
                                     <option>설계중</option>
                                     <option>작업중</option>
                                     <option>도장/마감중</option>
-                                    <option>작업완료</option>
+                                    <option>납품대기</option>
                                     <option>납품완료</option>
                                 </select>
                             </div>
 
                             {/* 완료 상태일 경우 실제 완료일 입력 필드 노출 */}
-                            {['작업완료', '납품완료'].includes(data.status) && (
+                            {['작업완료', '납품완료', '납품대기'].includes(data.status) && (
                                 <div>
                                     <label className="text-xs font-bold text-gray-500 text-blue-600">실제 완료일 (시공/납품 완료)</label>
                                     <input type="date" className="border p-2 rounded w-full bg-blue-50 border-blue-200" value={data.completedDate || ''} onChange={e=>setData({...data, completedDate:e.target.value})}/>
@@ -911,10 +933,10 @@
                 return all.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
             }, [orders]);
 
-            // 화면에 표시할 자재 목록
+            // 화면에 표시할 자재 목록 (단, '정보' 타입은 리스트에서 숨김 처리하여 오삭제 방지)
             const displayedMaterials = (selectedSupplier && !isCustomMode) 
-                ? (suppliers[selectedSupplier] || []) 
-                : allMaterials;
+                ? (suppliers[selectedSupplier] || []).filter(m => m.status !== '정보')
+                : allMaterials.filter(m => m.status !== '정보');
 
             const currentSupplierInfo = useMemo(() => {
                 if (baseInfo) return baseInfo;
@@ -1115,6 +1137,24 @@
                 setIsEditingInfo(false);
             };
 
+            // 거래처 완전 삭제 (정보 포함)
+            const handleDeleteSupplier = async () => {
+                if(!window.confirm(`'${selectedSupplier}'의 모든 발주 내역과 거래처 정보를 삭제하시겠습니까?`)) return;
+                
+                // 관련된 모든 오더를 스캔하여 해당 공급자 항목 제거
+                const updates = [];
+                for(const order of orders) {
+                    const supplierMaterials = (order.materials || []).filter(m => m.supplier === selectedSupplier);
+                    if(supplierMaterials.length > 0) {
+                        const newMaterials = order.materials.filter(m => m.supplier !== selectedSupplier);
+                        updates.push(onUpdateOrder({ ...order, materials: newMaterials }, false));
+                    }
+                }
+                
+                await Promise.all(updates);
+                setSelectedSupplier(null);
+            };
+
             const cycleStatus = (currentStatus) => {
                 if (currentStatus === '발주') return '회수대기';
                 if (currentStatus === '회수대기') return '회수완료';
@@ -1218,14 +1258,19 @@
                             </div>
                             
                             {!isCustomMode && selectedSupplier && (
-                                <div className="bg-slate-50 p-3 rounded">
+                                <div className="bg-slate-50 p-3 rounded relative">
                                     {!isEditingInfo ? (
-                                        <div className="flex flex-wrap gap-4 text-xs md:text-sm text-gray-600 items-center">
+                                        <div className="flex flex-wrap gap-4 text-xs md:text-sm text-gray-600 items-center pr-8">
                                             {currentSupplierInfo.phone ? <div className="flex items-center gap-1"><Phone size={14} /> {currentSupplierInfo.phone}</div> : <span className="text-gray-400">전화번호 없음</span>}
                                             {currentSupplierInfo.address ? <div className="flex items-center gap-1"><MapPin size={14} /> {currentSupplierInfo.address}</div> : <span className="text-gray-400">주소 없음</span>}
-                                            <button onClick={() => setIsEditingInfo(true)} className="ml-auto p-1 hover:bg-slate-200 rounded text-indigo-600">
-                                                <Edit3 size={14}/>
-                                            </button>
+                                            <div className="absolute top-2 right-2 flex gap-1">
+                                                <button onClick={() => setIsEditingInfo(true)} className="p-1.5 hover:bg-slate-200 rounded text-indigo-600" title="정보 수정">
+                                                    <Edit3 size={14}/>
+                                                </button>
+                                                <button onClick={handleDeleteSupplier} className="p-1.5 hover:bg-red-100 rounded text-red-500" title="거래처 및 내역 전체 삭제">
+                                                    <Trash2 size={14}/>
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : (
                                         <div className="space-y-2">
