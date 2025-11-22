@@ -84,7 +84,33 @@
             '대한아크릴': { phone: '02-7777-8888', email: 'acryl@daehan.com', address: '서울 중구 방산시장 A동', lat: 37.5670, lng: 127.0000 }
         };
 
-        const MOCK_DATA = [];
+        // 🚨 예시 데이터 복구 (연결 안 됐을 때 이거라도 보여줘야 해!)
+        const MOCK_DATA = [
+            {
+                id: 'mock-1', displayId: 'ORD-24-101', itemName: '성수동 카페 황동 테이블', clientName: '카페 루미에르',
+                manager: '김철수', technician: '이장인', orderDate: '2024-11-01',
+                deliveryDate: new Date(Date.now() + 86400000 * 1).toISOString().split('T')[0], 
+                status: '제작중',
+                description: '상판 헤어라인 마감 꼼꼼하게 부탁드립니다.',
+                materials: [
+                    { id: 11, supplier: '성수금속', item: '황동 파이프 30mm', quantity: '6본', status: '입고완료', date: '2024-11-15' },
+                    { id: 12, supplier: '을지레이저', item: '상판 레이저 가공', quantity: '10개', status: '제작완료', date: '2024-11-18' }
+                ],
+                files: [{ name: 'Table_Design_v3.pdf', url: '#', id: 101 }]
+            },
+            {
+                id: 'mock-2', displayId: 'ORD-24-102', itemName: '압구정 갤러리 입간판', clientName: '갤러리 큐브',
+                manager: '박영희', technician: '최고수', orderDate: '2024-11-05',
+                deliveryDate: new Date().toISOString().split('T')[0], 
+                status: '도장/마감',
+                description: '무광 블랙 분체도장. 로고 시트지 작업 포함.',
+                materials: [
+                    { id: 21, supplier: '을지레이저', item: '갈바 절곡', quantity: '2판', status: '입고완료', date: '2024-11-10' },
+                    { id: 22, supplier: '청계도장', item: '분체 도장(Black)', quantity: '1식', status: '발주중', date: '2024-11-19' }
+                ],
+                files: []
+            }
+        ];
 
         // --- Helpers ---
         const callGemini = async (prompt) => {
@@ -421,26 +447,50 @@
             const [user, setUser] = useState(null);
 
             useEffect(() => {
-                if (!firebaseConfig.apiKey) {
-                    setIsDemo(true); setOrders(MOCK_DATA); setLoading(false); return;
-                }
+                // 🚨 안전장치: 3초 타임아웃
+                let isConnected = false;
+                const timer = setTimeout(() => {
+                    if (!isConnected) {
+                        console.warn("Firebase 연결 지연... 데모 모드로 전환!");
+                        setIsDemo(true);
+                        setOrders(MOCK_DATA);
+                        setLoading(false);
+                    }
+                }, 3000);
+
                 try {
                     const app = initializeApp(firebaseConfig);
                     const dbInstance = getFirestore(app);
                     const authInstance = getAuth(app);
                     setDb(dbInstance);
                     signInAnonymously(authInstance);
+                    
                     onAuthStateChanged(authInstance, (u) => {
+                        isConnected = true; // 연결 성공 표시
+                        clearTimeout(timer); // 타임아웃 해제
+                        
                         setUser(u);
                         if (u) {
                             const q = query(collection(dbInstance, 'orders'), orderBy('createdAt', 'desc'));
                             onSnapshot(q, (snap) => {
                                 setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-                                setLoading(false); setIsDemo(false);
-                            }, () => { setIsDemo(true); setOrders(MOCK_DATA); setLoading(false); });
+                                setLoading(false);
+                                setIsDemo(false);
+                            }, () => { 
+                                setIsDemo(true); 
+                                setOrders(MOCK_DATA); 
+                                setLoading(false); 
+                            });
+                        } else {
+                            setLoading(false);
                         }
                     });
-                } catch (e) { setIsDemo(true); setOrders(MOCK_DATA); setLoading(false); }
+                } catch (e) { 
+                    setIsDemo(true); 
+                    setOrders(MOCK_DATA); 
+                    setLoading(false); 
+                }
+                return () => clearTimeout(timer);
             }, []);
 
             const handleLogin = (role) => { setIsAuthenticated(true); setIsAdmin(role === 'admin'); };
@@ -506,7 +556,7 @@
                         </header>
                         <main className="flex-1 overflow-y-auto p-4 md:p-6">
                             <div className="max-w-5xl mx-auto">
-                                {currentView === 'dashboard' && <Dashboard orders={orders} stats={stats} suppliers={suppliers} onNavigate={handleNavigate} isAdmin={isAdmin} currentUserId={user?.uid} />}
+                                {currentView === 'dashboard' && <DashboardView orders={orders} stats={stats} suppliers={suppliers} onNavigate={handleNavigate} />}
                                 {currentView === 'list' && <ListView orders={orders} onSelect={handleNavigate} onAdd={() => { setSelectedOrder(null); setCurrentView('form'); }} />}
                                 {currentView === 'detail' && <DetailView order={selectedOrder} onBack={() => { setSelectedOrder(null); setCurrentView('list'); }} onUpdate={(data, view) => { if(view) setCurrentView(view); else saveOrder(data); }} isAdmin={isAdmin} currentUserId={user?.uid} />}
                                 {currentView === 'form' && <FormView order={selectedOrder} onSave={saveOrder} onDelete={deleteOrder} onCancel={() => { setSelectedOrder(null); setCurrentView('list'); }} isAdmin={isAdmin} currentUserId={user?.uid} />}
