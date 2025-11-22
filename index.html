@@ -746,6 +746,647 @@
             );
         };
 
+        const FormView = ({ order, onSave, onDelete, onCancel, isAdmin, currentUserId }) => {
+            const [data, setData] = useState(order || {
+                clientName: '', itemName: '', 
+                manager: '', technician: '', 
+                deliveryAddress: '', 
+                orderDate: new Date().toISOString().split('T')[0], 
+                deliveryDate: '', 
+                completedDate: '', // 초기값 설정
+                status: '설계중', description: '', clientContact: '', files: []
+            });
+            const [isAiSuggesting, setIsAiSuggesting] = useState(false);
+            const fileInputRef = useRef(null);
+
+            const canEdit = !order || isAdmin || order.userId === currentUserId;
+
+            // 완료 상태일 때 기본 완료일이 없으면 오늘 날짜로 설정
+            useEffect(() => {
+                if (['납품완료', '납품대기'].includes(data.status) && !data.completedDate) {
+                    setData(prev => ({ ...prev, completedDate: new Date().toISOString().split('T')[0] }));
+                }
+            }, [data.status]);
+
+            const handleAiSuggest = async () => {
+                if (!data.itemName) return alert('작업명을 입력하세요.');
+                setIsAiSuggesting(true);
+                const prompt = `금속 회사 작업명 '${data.itemName}'에 필요한 상세 내용을 200자 이내로 추천해 줘.`;
+                const suggestion = await callGemini(prompt);
+                setData(prev => ({ ...prev, description: suggestion }));
+                setIsAiSuggesting(false);
+            };
+
+            const handleFileChange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                const mockFile = { id: Date.now(), name: file.name, url: '#' };
+                setData(prev => ({ ...prev, files: [...(prev.files || []), mockFile] }));
+                }
+            };
+
+            const removeFile = (fileId) => {
+                setData(prev => ({ ...prev, files: prev.files.filter(f => f.id !== fileId) }));
+            };
+
+            if (!canEdit) return <div className="p-10 text-center">수정 권한이 없습니다.<button onClick={onCancel} className="block mx-auto mt-4 bg-gray-200 px-4 py-2 rounded">돌아가기</button></div>;
+
+            return (
+                <div className="max-w-2xl mx-auto animate-fade-in pb-10 scroll-touch">
+                    <div onClick={onCancel} className="mb-4 cursor-pointer text-slate-500 font-bold">취소</div>
+                    <Card className="p-6 space-y-4">
+                        <h2 className="text-2xl font-bold">{order ? '수정' : '새 작업 등록'}</h2>
+                        <div className="grid gap-4">
+                            <div className="grid grid-cols-1 gap-1">
+                                <label className="text-xs font-bold text-gray-500">작업명</label>
+                                <input className="border p-2 rounded w-full" value={data.itemName} onChange={e=>setData({...data, itemName:e.target.value})}/>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500">담당자 (Manager)</label>
+                                    <input className="border p-2 rounded w-full" value={data.manager} onChange={e=>setData({...data, manager:e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500">작업자 (Technician)</label>
+                                    <input className="border p-2 rounded w-full" value={data.technician} onChange={e=>setData({...data, technician:e.target.value})}/>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500">클라이언트</label>
+                                    <input className="border p-2 rounded w-full" value={data.clientName} onChange={e=>setData({...data, clientName:e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500">연락처</label>
+                                    <input className="border p-2 rounded w-full" value={data.clientContact} onChange={e=>setData({...data, clientContact:e.target.value})}/>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-bold text-gray-500">납품/시공 주소</label>
+                                <input className="border p-2 rounded w-full" placeholder="주소를 입력하세요" value={data.deliveryAddress} onChange={e=>setData({...data, deliveryAddress:e.target.value})}/>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500">발주(접수) 날짜</label>
+                                    <input type="date" className="border p-2 rounded w-full" value={data.orderDate} onChange={e=>setData({...data, orderDate:e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500 text-red-500">납품(마감) 날짜</label>
+                                    <input type="date" className="border p-2 rounded w-full" value={data.deliveryDate} onChange={e=>setData({...data, deliveryDate:e.target.value})}/>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-bold text-gray-500">진행 상태</label>
+                                <select className="border p-2 rounded w-full" value={data.status} onChange={e=>setData({...data, status:e.target.value})}>
+                                    <option>설계중</option>
+                                    <option>작업중</option>
+                                    <option>도장/마감중</option>
+                                    <option>납품대기</option>
+                                    <option>납품완료</option>
+                                </select>
+                            </div>
+
+                            {/* 완료 상태일 경우 실제 완료일 입력 필드 노출 */}
+                            {['작업완료', '납품완료', '납품대기'].includes(data.status) && (
+                                <div>
+                                    <label className="text-xs font-bold text-gray-500 text-blue-600">실제 완료일 (시공/납품 완료)</label>
+                                    <input type="date" className="border p-2 rounded w-full bg-blue-50 border-blue-200" value={data.completedDate || ''} onChange={e=>setData({...data, completedDate:e.target.value})}/>
+                                </div>
+                            )}
+
+                            <div>
+                                <div className="flex justify-between mb-1">
+                                    <label className="text-xs font-bold text-gray-500">작업 내용 / 메모</label>
+                                    <button onClick={handleAiSuggest} className="text-xs text-indigo-600 font-bold">{isAiSuggesting ? '생성중...' : 'AI 추천'}</button>
+                                </div>
+                                <textarea className="border p-2 rounded w-full h-24" value={data.description} onChange={e=>setData({...data, description:e.target.value})}/>
+                            </div>
+
+                            <div className="border-t pt-4 mt-2">
+                                <label className="text-xs font-bold text-gray-500 mb-2 block">도면 / 파일 첨부</label>
+                                <div className="space-y-2">
+                                {(data.files || []).map(f => (
+                                    <div key={f.id} className="flex justify-between items-center p-2 bg-slate-50 rounded border text-sm">
+                                    <div className="flex items-center gap-2 truncate">
+                                        <Paperclip size={14} className="text-gray-400"/>
+                                        <span className="truncate">{f.name}</span>
+                                    </div>
+                                    <button onClick={() => removeFile(f.id)} className="text-red-500 hover:text-red-700"><X size={14}/></button>
+                                    </div>
+                                ))}
+                                </div>
+                                <div className="mt-2 flex items-center gap-2">
+                                <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
+                                <button onClick={() => fileInputRef.current.click()} className="text-sm bg-gray-100 border border-gray-300 px-3 py-1.5 rounded flex items-center gap-2 hover:bg-gray-200">
+                                    <Plus size={14}/> 파일 추가
+                                </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-4 border-t">
+                            {order && <button onClick={()=>onDelete(order.id)} className="text-red-500 text-sm font-bold px-4">삭제</button>}
+                            <button onClick={()=>onSave(data, true)} className="bg-slate-800 text-white px-6 py-2 rounded font-bold">저장</button>
+                        </div>
+                    </Card>
+                </div>
+            );
+        };
+
+        const MaterialManageView = ({ suppliers, orders, onUpdateOrder }) => {
+            const [selectedSupplier, setSelectedSupplier] = useState(null);
+            const [isCustomMode, setIsCustomMode] = useState(false);
+            const [editingMaterial, setEditingMaterial] = useState(null); // 수정할 자재 상태
+            const [isEditingInfo, setIsEditingInfo] = useState(false); // 거래처 정보 수정 모드
+            const [editingInfoData, setEditingInfoData] = useState({ phone: '', email: '', address: '' });
+            const baseInfo = BASE_SUPPLIER_INFO[selectedSupplier];
+            
+            const [quickAdd, setQuickAdd] = useState(false);
+            
+            // --- 다중 입력 상태 관리 ---
+            const [batchHeader, setBatchHeader] = useState({
+                orderId: '',
+                supplier: '',
+                date: new Date().toISOString().split('T')[0]
+            });
+            const [batchItems, setBatchItems] = useState([{ id: Date.now(), item: '', quantity: '' }]);
+            
+            const [newSupplierInfo, setNewSupplierInfo] = useState({ phone: '', email: '', address: '' });
+
+            useEffect(() => { 
+                if (selectedSupplier && !isCustomMode) {
+                    setBatchHeader(prev => ({ ...prev, supplier: selectedSupplier }));
+                } else if (isCustomMode) {
+                    setBatchHeader(prev => ({ ...prev, supplier: '' }));
+                }
+            }, [selectedSupplier, isCustomMode]);
+
+            // 전체 자재 목록 (날짜 내림차순 정렬)
+            const allMaterials = useMemo(() => {
+                const all = [];
+                orders.forEach(o => {
+                    (o.materials || []).forEach(m => {
+                        all.push({ ...m, orderId: o.id, orderName: o.itemName });
+                    });
+                });
+                return all.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+            }, [orders]);
+
+            // 화면에 표시할 자재 목록 (단, '정보' 타입은 리스트에서 숨김 처리하여 오삭제 방지)
+            const displayedMaterials = (selectedSupplier && !isCustomMode) 
+                ? (suppliers[selectedSupplier] || []).filter(m => m.status !== '정보')
+                : allMaterials.filter(m => m.status !== '정보');
+
+            const currentSupplierInfo = useMemo(() => {
+                if (baseInfo) return baseInfo;
+                if (selectedSupplier && suppliers[selectedSupplier]) {
+                    // 거래처 정보가 있는 항목 찾기 (status: '정보'가 우선, 없으면 아무거나)
+                    const infoItem = suppliers[selectedSupplier].find(m => m.status === '정보') || suppliers[selectedSupplier][0];
+                    return infoItem?.supplierInfo || {};
+                }
+                return {};
+            }, [selectedSupplier, suppliers, baseInfo]);
+
+            // 거래처 선택 시 수정 데이터 초기화
+            useEffect(() => {
+                if (selectedSupplier && !isCustomMode) {
+                    setEditingInfoData({
+                        phone: currentSupplierInfo.phone || '',
+                        email: currentSupplierInfo.email || '',
+                        address: currentSupplierInfo.address || ''
+                    });
+                    setIsEditingInfo(false);
+                }
+            }, [selectedSupplier, currentSupplierInfo, isCustomMode]);
+
+            // 왼쪽 사이드바 정렬된 거래처 목록
+            const sortedSuppliers = useMemo(() => {
+                const list = Object.keys(suppliers).map(name => {
+                    const items = suppliers[name];
+                    // '발주' 또는 '회수대기' 상태가 하나라도 있으면 활성 상태로 간주
+                    const hasActive = items.some(m => ['발주', '회수대기', '작업중'].includes(m.status));
+                    const pickupCnt = items.filter(m => m.status === '회수대기').length;
+                    const activeCnt = items.filter(m => m.status === '발주').length;
+                    return { name, hasActive, pickupCnt, activeCnt, items };
+                });
+
+                return list.sort((a, b) => {
+                    // 1순위: 활성 발주 유무 (있는 것 우선)
+                    if (a.hasActive && !b.hasActive) return -1;
+                    if (!a.hasActive && b.hasActive) return 1;
+                    
+                    // 2순위: 가나다순
+                    return a.name.localeCompare(b.name, 'ko');
+                });
+            }, [suppliers]);
+
+            // 행 추가/삭제 함수
+            const addRow = () => {
+                setBatchItems([...batchItems, { id: Date.now() + Math.random(), item: '', quantity: '' }]);
+            };
+            
+            const removeRow = (id) => {
+                if (batchItems.length === 1) {
+                    setBatchItems([{ id: Date.now(), item: '', quantity: '' }]); // 마지막 하나는 내용만 초기화
+                } else {
+                    setBatchItems(batchItems.filter(i => i.id !== id));
+                }
+            };
+
+            const updateRow = (id, field, value) => {
+                setBatchItems(batchItems.map(i => i.id === id ? { ...i, [field]: value } : i));
+            };
+
+            const handleBatchAdd = async () => {
+                const validItems = batchItems.filter(i => i.item.trim() !== '');
+                
+                if (validItems.length === 0 && !isCustomMode) return alert("품목을 최소 1개 이상 입력하세요");
+                if (isCustomMode && !batchHeader.supplier) return alert("거래처명을 입력하세요.");
+                
+                let targetOrder = orders.find(o => o.id === batchHeader.orderId);
+                
+                if (!targetOrder && !batchHeader.orderId) {
+                    targetOrder = orders.find(o => o.itemName === '기타 자재 발주' && !['납품완료'].includes(o.status));
+                    if (!targetOrder) {
+                        targetOrder = {
+                            id: `mock-misc-${Date.now()}`, 
+                            itemName: '기타 자재 발주',
+                            clientName: '내부',
+                            status: '작업중',
+                            orderDate: new Date().toISOString().split('T')[0],
+                            deliveryDate: '',
+                            materials: []
+                        };
+                    }
+                }
+
+                const finalSupplier = isCustomMode ? batchHeader.supplier : selectedSupplier;
+                const isInfoRegistration = isCustomMode && validItems.length === 0;
+                const newMaterials = [];
+
+                if (isInfoRegistration) {
+                    newMaterials.push({
+                        id: Date.now(),
+                        supplier: finalSupplier,
+                        item: "거래처 정보",
+                        quantity: "-",
+                        status: "정보",
+                        date: batchHeader.date,
+                        supplierInfo: {
+                            ...newSupplierInfo,
+                            ...getMockCoordinates(newSupplierInfo.address)
+                        }
+                    });
+                } else {
+                    validItems.forEach((itemData, index) => {
+                        const materialData = {
+                            id: Date.now() + index, 
+                            supplier: finalSupplier, 
+                            item: itemData.item,
+                            quantity: itemData.quantity, 
+                            status: "발주", 
+                            date: batchHeader.date
+                        };
+                        
+                        if (isCustomMode && index === 0) {
+                            materialData.supplierInfo = {
+                                ...newSupplierInfo,
+                                ...getMockCoordinates(newSupplierInfo.address)
+                            };
+                        }
+                        newMaterials.push(materialData);
+                    });
+                }
+
+                const updatedMaterials = [...(targetOrder.materials || []), ...newMaterials];
+                await onUpdateOrder({ ...targetOrder, materials: updatedMaterials }, false);
+                
+                setQuickAdd(false);
+                setBatchItems([{ id: Date.now(), item: '', quantity: '' }]);
+                setNewSupplierInfo({ phone: '', email: '', address: '' });
+                if(isCustomMode) setSelectedSupplier(null); 
+                alert(isInfoRegistration ? "거래처 정보가 등록되었습니다!" : `${newMaterials.length}건의 발주가 등록되었습니다!`);
+            };
+
+            // 거래처 정보 수정 저장
+            const handleSaveInfo = async () => {
+                if (!selectedSupplier) return;
+
+                // 해당 거래처의 '정보' 항목 찾기 (없으면 첫번째 항목)
+                // 정확한 수정 대상(Order)을 찾기 위해 전체 스캔 필요할 수 있음
+                let targetOrder = null;
+                let targetMaterialId = null;
+
+                // 1. 현재 거래처 목록에서 '정보' 타입이 있는지 확인
+                const items = suppliers[selectedSupplier];
+                const infoItem = items.find(m => m.status === '정보');
+
+                if (infoItem) {
+                    // 기존 정보 항목 업데이트
+                    targetOrder = orders.find(o => o.id === infoItem.orderId);
+                    targetMaterialId = infoItem.id;
+                } else {
+                    // 정보 항목이 없으면(예: 일반 발주만 있는 경우), '기타 자재 발주'에 정보 항목을 새로 생성해야 함
+                    // 혹은 기존 아이템 중 하나에 정보를 덮어씌울 수도 있지만, '정보' 타입 항목을 만드는 게 깔끔함.
+                    targetOrder = orders.find(o => o.itemName === '기타 자재 발주' && !['납품완료'].includes(o.status));
+                    if (!targetOrder) {
+                         // 기타 프로젝트가 없으면 생성해야함 (기존 로직 활용)
+                         // 여기서는 간단히 alert 처리하고 넘어가거나 로직 복잡해짐. 
+                         // 편의상 기존 아이템 중 첫번째에 정보를 박거나, 아까 handleQuickAdd 처럼 새 항목 추가 로직 태움
+                    }
+                }
+
+                // 정보 업데이트 로직 실행
+                if (targetOrder && targetMaterialId) {
+                    const updatedMaterials = targetOrder.materials.map(m => 
+                        m.id === targetMaterialId ? { 
+                            ...m, 
+                            supplierInfo: { ...editingInfoData, ...getMockCoordinates(editingInfoData.address) } 
+                        } : m
+                    );
+                    await onUpdateOrder({ ...targetOrder, materials: updatedMaterials }, false);
+                } else {
+                    // 타겟이 없으면(순수 Base Supplier거나 정보 항목 없음), 새로 정보 항목 추가
+                    let miscOrder = orders.find(o => o.itemName === '기타 자재 발주' && !['납품완료'].includes(o.status));
+                    if(!miscOrder) {
+                        miscOrder = {
+                            id: `mock-misc-${Date.now()}`, 
+                            itemName: '기타 자재 발주',
+                            clientName: '내부',
+                            status: '작업중',
+                            orderDate: new Date().toISOString().split('T')[0],
+                            deliveryDate: '',
+                            materials: []
+                        };
+                    }
+                    
+                    const newInfoItem = {
+                        id: Date.now(),
+                        supplier: selectedSupplier,
+                        item: "거래처 정보",
+                        quantity: "-",
+                        status: "정보",
+                        date: new Date().toISOString().split('T')[0],
+                        supplierInfo: { ...editingInfoData, ...getMockCoordinates(editingInfoData.address) }
+                    };
+                    
+                    await onUpdateOrder({ ...miscOrder, materials: [...(miscOrder.materials || []), newInfoItem] }, false);
+                }
+
+                setIsEditingInfo(false);
+            };
+
+            // 거래처 완전 삭제 (정보 포함)
+            const handleDeleteSupplier = async () => {
+                if(!window.confirm(`'${selectedSupplier}'의 모든 발주 내역과 거래처 정보를 삭제하시겠습니까?`)) return;
+                
+                // 관련된 모든 오더를 스캔하여 해당 공급자 항목 제거
+                const updates = [];
+                for(const order of orders) {
+                    const supplierMaterials = (order.materials || []).filter(m => m.supplier === selectedSupplier);
+                    if(supplierMaterials.length > 0) {
+                        const newMaterials = order.materials.filter(m => m.supplier !== selectedSupplier);
+                        updates.push(onUpdateOrder({ ...order, materials: newMaterials }, false));
+                    }
+                }
+                
+                await Promise.all(updates);
+                setSelectedSupplier(null);
+            };
+
+            const cycleStatus = (currentStatus) => {
+                if (currentStatus === '발주') return '회수대기';
+                if (currentStatus === '회수대기') return '회수완료';
+                return '발주';
+            };
+
+            const toggleStatus = async (m) => {
+                if (m.status === '정보') return;
+                const order = orders.find(o => o.id === m.orderId);
+                if (order) {
+                    const nextStatus = cycleStatus(m.status);
+                    const updated = order.materials.map(x => x.id === m.id ? { ...x, status: nextStatus } : x);
+                    await onUpdateOrder({ ...order, materials: updated }, false);
+                }
+            };
+
+            const handleDelete = async (m) => {
+                if(!window.confirm(`${m.item} 항목을 정말 삭제하시겠습니까?`)) return;
+                const order = orders.find(o => o.id === m.orderId);
+                if(order) {
+                    const updated = order.materials.filter(x => x.id !== m.id);
+                    await onUpdateOrder({ ...order, materials: updated }, false);
+                }
+            };
+
+            const handleEditSave = async () => {
+                if (!editingMaterial) return;
+                const order = orders.find(o => o.id === editingMaterial.orderId);
+                if(order) {
+                    const updated = order.materials.map(x => x.id === editingMaterial.id ? { ...x, ...editingMaterial } : x);
+                    await onUpdateOrder({ ...order, materials: updated }, false);
+                    setEditingMaterial(null);
+                }
+            };
+
+            return (
+                <>
+                {/* 수정 모달 (Portal 적용) */}
+                {editingMaterial && (
+                    <ModalOverlay onClose={()=>setEditingMaterial(null)}>
+                        <Card className="w-full max-w-sm p-4 shadow-xl border-indigo-200 bg-white" onClick={e=>e.stopPropagation()}>
+                            <h3 className="font-bold text-lg mb-3 flex items-center gap-2"><Edit3 size={18}/> 자재 수정</h3>
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-xs text-gray-500 font-bold">발주일</label>
+                                    <input type="date" className="w-full border p-2 rounded text-sm" value={editingMaterial.date || ''} onChange={e => setEditingMaterial({...editingMaterial, date: e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-500 font-bold">거래처</label>
+                                    <input className="w-full border p-2 rounded text-sm" value={editingMaterial.supplier} onChange={e => setEditingMaterial({...editingMaterial, supplier: e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-500 font-bold">품목</label>
+                                    <input className="w-full border p-2 rounded text-sm" value={editingMaterial.item} onChange={e => setEditingMaterial({...editingMaterial, item: e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-500 font-bold">수량</label>
+                                    <input className="w-full border p-2 rounded text-sm" value={editingMaterial.quantity} onChange={e => setEditingMaterial({...editingMaterial, quantity: e.target.value})}/>
+                                </div>
+                                <div className="flex gap-2 mt-4">
+                                    <button onClick={()=>setEditingMaterial(null)} className="flex-1 bg-gray-200 py-2 rounded text-sm font-bold">취소</button>
+                                    <button onClick={handleEditSave} className="flex-1 bg-indigo-600 text-white py-2 rounded text-sm font-bold">저장</button>
+                                </div>
+                            </div>
+                        </Card>
+                    </ModalOverlay>
+                )}
+
+                <div className="flex h-full gap-4 animate-fade-in flex-col md:flex-row overflow-hidden relative">
+                    <div className="w-full md:w-1/3 overflow-y-auto space-y-2 pr-0 md:pr-2 max-h-[200px] md:max-h-full flex-shrink-0 scroll-touch">
+                        <div onClick={() => { setIsCustomMode(true); setSelectedSupplier(null); setBatchHeader(prev=>({...prev, supplier: ''})); }} className={`p-3 border rounded-lg cursor-pointer transition-all flex items-center gap-2 ${isCustomMode ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
+                        <Plus size={16} />
+                        <span className="font-bold">직접 입력 (새 거래처)</span>
+                        </div>
+                        <div onClick={() => { setSelectedSupplier(null); setIsCustomMode(false); }} className={`p-3 border rounded-lg cursor-pointer transition-all flex items-center gap-2 ${!selectedSupplier && !isCustomMode ? 'bg-slate-800 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
+                            <FileText size={16} />
+                            <span className="font-bold">전체 보기</span>
+                        </div>
+                        {sortedSuppliers.map(s => {
+                        return (
+                            <div key={s.name} onClick={() => { setSelectedSupplier(s.name); setIsCustomMode(false); }} className={`p-3 border rounded-lg cursor-pointer transition-all ${selectedSupplier === s.name && !isCustomMode ? 'bg-slate-800 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
+                            <div className="flex justify-between items-center mb-1">
+                                <span className="font-bold">{s.name}</span>
+                                {s.pickupCnt > 0 && <span className="bg-indigo-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold animate-pulse">회수 {s.pickupCnt}</span>}
+                            </div>
+                            <div className="text-xs opacity-70">발주중 {s.activeCnt}건 / 총 {s.items.length}건</div>
+                            </div>
+                        )
+                        })}
+                    </div>
+
+                    <div className="w-full md:w-2/3 bg-white border rounded-xl p-4 md:p-6 flex flex-col overflow-hidden">
+                        <div className="mb-4 pb-4 border-b flex-shrink-0">
+                            <div className="flex justify-between items-start mb-2">
+                            {isCustomMode ? (
+                                <input className="text-2xl font-bold border-b border-gray-300 focus:border-indigo-500 outline-none placeholder-gray-300 w-full" placeholder="거래처명 입력" value={batchHeader.supplier} onChange={e => setBatchHeader({...batchHeader, supplier: e.target.value})}/>
+                            ) : (
+                                <h2 className="text-2xl font-bold truncate">{selectedSupplier || "전체 발주 내역"}</h2>
+                            )}
+                            <button onClick={() => setQuickAdd(!quickAdd)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold flex items-center gap-1 flex-shrink-0 ml-2"><Plus size={14} /> 자재 등록</button>
+                            </div>
+                            
+                            {!isCustomMode && selectedSupplier && (
+                                <div className="bg-slate-50 p-3 rounded relative">
+                                    {!isEditingInfo ? (
+                                        <div className="flex flex-wrap gap-4 text-xs md:text-sm text-gray-600 items-center pr-8">
+                                            {currentSupplierInfo.phone ? <div className="flex items-center gap-1"><Phone size={14} /> {currentSupplierInfo.phone}</div> : <span className="text-gray-400">전화번호 없음</span>}
+                                            {currentSupplierInfo.address ? <div className="flex items-center gap-1"><MapPin size={14} /> {currentSupplierInfo.address}</div> : <span className="text-gray-400">주소 없음</span>}
+                                            <div className="absolute top-2 right-2 flex gap-1">
+                                                <button onClick={() => setIsEditingInfo(true)} className="p-1.5 hover:bg-slate-200 rounded text-indigo-600" title="정보 수정">
+                                                    <Edit3 size={14}/>
+                                                </button>
+                                                <button onClick={handleDeleteSupplier} className="p-1.5 hover:bg-red-100 rounded text-red-500" title="거래처 및 내역 전체 삭제">
+                                                    <Trash2 size={14}/>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                                <input placeholder="전화번호" className="border p-2 rounded text-sm" value={editingInfoData.phone} onChange={e => setEditingInfoData({...editingInfoData, phone: e.target.value})}/>
+                                                <input placeholder="이메일" className="border p-2 rounded text-sm" value={editingInfoData.email} onChange={e => setEditingInfoData({...editingInfoData, email: e.target.value})}/>
+                                                <input placeholder="주소" className="border p-2 rounded text-sm" value={editingInfoData.address} onChange={e => setEditingInfoData({...editingInfoData, address: e.target.value})}/>
+                                            </div>
+                                            <div className="flex justify-end gap-2">
+                                                <button onClick={() => setIsEditingInfo(false)} className="text-xs text-gray-500 hover:underline">취소</button>
+                                                <button onClick={handleSaveInfo} className="text-xs bg-indigo-600 text-white px-3 py-1 rounded font-bold">저장</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            
+                            {isCustomMode && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-slate-50 p-3 rounded mt-2">
+                                    <input placeholder="전화번호" className="border p-2 rounded text-sm" value={newSupplierInfo.phone} onChange={e => setNewSupplierInfo({...newSupplierInfo, phone: e.target.value})}/>
+                                    <input placeholder="이메일" className="border p-2 rounded text-sm" value={newSupplierInfo.email} onChange={e => setNewSupplierInfo({...newSupplierInfo, email: e.target.value})}/>
+                                    <input placeholder="주소 (회수 동선용)" className="border p-2 rounded text-sm" value={newSupplierInfo.address} onChange={e => setNewSupplierInfo({...newSupplierInfo, address: e.target.value})}/>
+                                </div>
+                            )}
+                        </div>
+
+                        {(quickAdd || isCustomMode) && (
+                            <div className="mb-4 p-3 bg-indigo-50 rounded border border-indigo-100 animate-fade-in flex-shrink-0">
+                            <div className="text-sm font-bold text-indigo-800 mb-2">새 자재 발주 / 거래처 등록</div>
+                            <div className="space-y-2 mb-3">
+                                 {/* 공통 정보 입력 */}
+                                <div className="flex gap-2">
+                                    <input type="date" className="border p-2 rounded text-sm w-1/3 min-w-[120px]" value={batchHeader.date} onChange={e => setBatchHeader({ ...batchHeader, date: e.target.value })} />
+                                    <select className="border p-2 rounded flex-1 text-sm min-w-0" value={batchHeader.orderId} onChange={e => setBatchHeader({ ...batchHeader, orderId: e.target.value })}>
+                                    <option value="">프로젝트 선택 (없으면 기타)</option>
+                                    {orders.filter(o => !['납품완료'].includes(o.status)).map(o => <option key={o.id} value={o.id}>{o.itemName}</option>)}
+                                    </select>
+                                </div>
+                                
+                                {/* 다중 품목 입력 리스트 */}
+                                <div className="space-y-2">
+                                    {batchItems.map((row, index) => (
+                                        <div key={row.id} className="flex gap-2 items-center animate-fade-in">
+                                            <span className="text-xs font-bold text-gray-400 w-4 text-center">{index + 1}</span>
+                                            <input 
+                                                placeholder={isCustomMode ? "품목명 (정보만 저장시 빈칸)" : "품목명"} 
+                                                className="border p-2 rounded flex-1 text-sm min-w-0" 
+                                                value={row.item} 
+                                                onChange={e => updateRow(row.id, 'item', e.target.value)} 
+                                            />
+                                            <input 
+                                                placeholder="수량" 
+                                                className="border p-2 rounded w-16 md:w-20 text-sm text-center" 
+                                                value={row.quantity} 
+                                                onChange={e => updateRow(row.id, 'quantity', e.target.value)} 
+                                            />
+                                            <button onClick={() => removeRow(row.id)} className="text-gray-400 hover:text-red-500">
+                                                <X size={18} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                
+                                <button onClick={addRow} className="text-xs text-indigo-600 font-bold flex items-center gap-1 hover:underline mt-1">
+                                    <Plus size={14}/> 품목 추가하기
+                                </button>
+                            </div>
+                            <button onClick={handleBatchAdd} className="w-full bg-indigo-600 text-white py-2 rounded text-sm font-bold hover:bg-indigo-700">
+                                {isCustomMode && batchItems.every(i => !i.item) ? "거래처 정보만 등록" : "일괄 등록하기"}
+                            </button>
+                            </div>
+                        )}
+
+                        <div className="flex-1 overflow-y-auto scroll-touch">
+                            <table className="w-full text-sm text-left min-w-[300px]">
+                            <thead className="bg-slate-50 border-b sticky top-0 z-10">
+                                <tr>
+                                    <th className="p-2 w-16">상태</th>
+                                    {!selectedSupplier && <th className="p-2 w-20">거래처</th>}
+                                    <th className="p-2">품목/수량</th>
+                                    <th className="p-2 text-right w-16">관리</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {displayedMaterials.length > 0 ? displayedMaterials.map((m, i) => (
+                                <tr key={i} className="border-b hover:bg-slate-50 group">
+                                    <td className="p-2 align-top pt-3"><MaterialStatusBadge status={m.status} onClick={() => toggleStatus(m)} /></td>
+                                    {!selectedSupplier && <td className="p-2 align-top pt-3 font-bold text-slate-700 text-xs break-words">{m.supplier}</td>}
+                                    <td className="p-2">
+                                        <div className="text-[10px] text-gray-400 mb-0.5">{m.date}</div>
+                                        <div className="font-bold text-slate-700">{m.item}</div>
+                                        <div className="text-xs text-gray-500">{m.quantity}</div>
+                                        <div className="text-[10px] text-indigo-500 mt-0.5">{m.orderName}</div>
+                                    </td>
+                                    <td className="p-2 text-right align-top pt-2">
+                                        <div className="flex justify-end gap-1 md:opacity-50 md:group-hover:opacity-100 transition-opacity opacity-100">
+                                            <button onClick={()=>setEditingMaterial(m)} className="p-1.5 hover:bg-blue-100 text-blue-600 rounded"><Edit3 size={14}/></button>
+                                            <button onClick={()=>handleDelete(m)} className="p-1.5 hover:bg-red-100 text-red-600 rounded"><Trash2 size={14}/></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                )) : (
+                                <tr><td colSpan="5" className="p-8 text-center text-gray-400">등록된 발주 내역이 없습니다.</td></tr>
+                                )}
+                            </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                </>
+            );
+        };
+
         const CalendarView = ({ orders, onSelect }) => {
             const [date, setDate] = useState(new Date());
             const days = [];
@@ -1070,7 +1711,7 @@
                         </header>
 
                         <div className="h-full overflow-y-auto p-4 md:p-6 scroll-touch">
-                            <div className="max-w-5xl mx-auto">
+                            <div className={`max-w-5xl mx-auto ${['calendar', 'materials', 'detail'].includes(currentView) ? 'h-full' : ''}`}>
                                 {currentView === 'dashboard' && <Dashboard orders={orders} stats={stats} suppliers={suppliers} onNavigate={handleNavigate} isAdmin={isAdmin} currentUserId={user?.uid} />}
                                 {currentView === 'calendar' && <CalendarView orders={orders} onSelect={handleNavigate} />}
                                 {currentView === 'list' && !selectedOrder && <ListView orders={orders} onSelect={handleNavigate} onAdd={() => { setSelectedOrder(null); setCurrentView('form'); }} />}
