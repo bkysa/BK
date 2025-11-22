@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>숨쉬는 깡통</title>
+    <title>숨쉬는 깡통 - 제작/발주 관리 시스템</title>
     <!-- Load Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Load Lucide Icons -->
@@ -18,6 +18,13 @@
 
     <div id="app" class="flex h-screen overflow-hidden">
         <!-- Application will render here -->
+        <div class="flex flex-1 items-center justify-center text-slate-400">
+            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>로딩 중...</span>
+        </div>
     </div>
 
     <!-- Custom Alert/Confirm Modal Structure -->
@@ -121,6 +128,7 @@
             }
 
             modal.classList.remove('hidden');
+            lucide.createIcons();
         }
 
         const StatusBadgeHTML = (status) => {
@@ -149,6 +157,8 @@
         const formatDate = (d) => {
             if (!d) return '';
             const date = new Date(d);
+            // Handle potentially invalid date objects (like those from Firestore if not properly handled)
+            if (isNaN(date.getTime())) return ''; 
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
@@ -182,6 +192,7 @@
             ];
 
             try {
+                // Check if collection is empty
                 const docs = await getDocs(query(getOrdersCollectionRef()));
                 if (docs.empty) {
                     for (const item of MOCK_DATA) {
@@ -200,19 +211,35 @@
         };
 
         const listenToOrders = () => {
-            if (!state.isAuthReady) return;
-
-            onSnapshot(query(getOrdersCollectionRef()), (snapshot) => {
+            if (!state.isAuthReady || !state.user) return; // Prevent listening before auth is ready
+            
+            // Set up real-time listener
+            const unsubscribe = onSnapshot(query(getOrdersCollectionRef()), (snapshot) => {
                 const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 state.orders = items;
                 
+                // Only check and load mock data once after the first successful fetch
                 if (!state.isDataInitialized) {
-                    loadMockData(); // Check and load mock data only once
+                    loadMockData(); 
                     state.isDataInitialized = true;
                 }
                 
+                // If a selected order was deleted externally, clear it
+                if (state.selectedOrder && !state.orders.some(o => o.id === state.selectedOrder.id)) {
+                    state.selectedOrder = null;
+                    if (state.view === 'detail') state.view = 'list';
+                }
+                
+                // If in detail view, update the selected order data
+                if (state.view === 'detail' && state.selectedOrder) {
+                    state.selectedOrder = state.orders.find(o => o.id === state.selectedOrder.id) || null;
+                }
+
                 renderApp();
             }, (err) => console.error("Firestore listen error:", err));
+
+            // Since this is a simple single-page app, we don't return the unsubscribe function, 
+            // but in a larger app, you would use it on cleanup.
         };
 
         // --- View Logic and Rendering ---
@@ -260,7 +287,7 @@
 
             if (ACCESS_CODES[code]) {
                 try {
-                    // GitHub Pages 환경에서는 __initial_auth_token이 없으므로 익명 인증 사용
+                    // 익명 인증 사용
                     await signInAnonymously(auth); 
                     const uid = auth.currentUser ? auth.currentUser.uid : `anon-${Date.now()}`;
 
@@ -268,7 +295,7 @@
                     state.user = userData;
                     localStorage.setItem('kkangtong_user', JSON.stringify(userData));
                     state.view = 'dashboard';
-                    renderApp();
+                    renderApp(); // Force render immediately after login success
                 } catch (e) {
                     errorEl.textContent = '로그인 중 오류 발생: ' + e.message;
                     errorEl.classList.remove('hidden');
@@ -350,14 +377,21 @@
                 pickup: orders.reduce((acc, o) => acc + (o.materials || []).filter(m => m.status === '제작완료').length, 0),
                 urgent: orders.filter(o => {
                     if (!o.deliveryDate || ['납품완료', '완료된 작업'].includes(o.status)) return false;
-                    const diffDays = Math.ceil((new Date(o.deliveryDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                    // Ensure date parsing is robust
+                    const deliveryDate = new Date(o.deliveryDate);
+                    if (isNaN(deliveryDate.getTime())) return false; 
+
+                    const diffDays = Math.ceil((deliveryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                     return diffDays >= 0 && diffDays <= 2;
                 }).length,
                 completed: orders.filter(o => {
                     const isDone = ['납품완료', '완료된 작업'].includes(o.status);
                     const oneMonthAgo = new Date();
                     oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+                    
                     const delDate = new Date(o.deliveryDate);
+                    if (isNaN(delDate.getTime())) return false;
+                    
                     return isDone && delDate >= oneMonthAgo;
                 }).length,
             };
@@ -455,7 +489,9 @@
                     const today = new Date();
                     list = orders.filter(o => {
                         if (!o.deliveryDate || ['납품완료', '완료된 작업'].includes(o.status)) return false;
-                        const diffDays = Math.ceil((new Date(o.deliveryDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                        const deliveryDate = new Date(o.deliveryDate);
+                        if (isNaN(deliveryDate.getTime())) return false; 
+                        const diffDays = Math.ceil((deliveryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                         return diffDays >= 0 && diffDays <= 2;
                     });
                 } else if (statKey === 'completed') {
@@ -465,6 +501,7 @@
                         const oneMonthAgo = new Date();
                         oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
                         const delDate = new Date(o.deliveryDate);
+                        if (isNaN(delDate.getTime())) return false;
                         return isDone && delDate >= oneMonthAgo;
                     });
                 }
@@ -489,7 +526,7 @@
                 }).join('');
 
             const modalHTML = `
-                <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onclick="document.getElementById('stat-detail-modal').remove()">
+                <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onclick="document.getElementById('stat-detail-modal').closest('.fixed').remove()">
                     <div id="stat-detail-modal" class="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]" onclick="event.stopPropagation()">
                         <div class="bg-slate-50 p-4 border-b flex justify-between items-center">
                             <h3 class="font-bold text-slate-700 flex items-center gap-2">${title} (${list.length})</h3>
@@ -518,7 +555,7 @@
                 `).join('');
 
              const modalHTML = `
-                 <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onclick="document.getElementById('pickup-modal').remove()">
+                 <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onclick="document.getElementById('pickup-modal').closest('.fixed').remove()">
                     <div id="pickup-modal" class="bg-white w-full max-w-sm rounded-xl shadow-2xl p-4" onclick="event.stopPropagation()">
                        <div class="flex justify-between items-center mb-4 border-b pb-2">
                          <h3 class="font-bold text-lg text-indigo-800 flex items-center gap-2">${lucide.createIcons()['Truck'].toSvg({ size: 20 })} ${supplierName} 회수 품목</h3>
@@ -603,13 +640,18 @@
         };
 
         function renderDetailView(order) {
+            // Null check for safety
+            if (!order) {
+                return `<div class="p-10 text-center text-red-500">작업 정보를 찾을 수 없습니다.</div>`;
+            }
+
              const matListHTML = (order.materials || []).map((m, i) => `
                   <tr key="${i}" class="border-b last:border-0 hover:bg-slate-50">
-                    <td class="p-2 text-gray-500 text-xs">${m.date}</td>
-                    <td class="p-2 font-medium">${m.supplier}</td>
-                    <td class="p-2"><div class="font-medium">${m.item}</div><div class="text-xs text-gray-500">${m.quantity}</div></td>
+                    <td class="p-2 text-gray-500 text-xs">${m.date || '-'}</td>
+                    <td class="p-2 font-medium">${m.supplier || '-'}</td>
+                    <td class="p-2"><div class="font-medium">${m.item || '-'}</div><div class="text-xs text-gray-500">${m.quantity || '-'}</div></td>
                     <td class="p-2">
-                      <select data-order-id="${order.id}" data-mat-id="${m.id}" onchange="handleMaterialStatusUpdate(this.dataset.orderId, parseInt(this.dataset.matId), this.value)" 
+                      <select data-order-id="${order.id}" data-mat-id="${m.id}" onchange="handleMaterialStatusUpdate(this.dataset.order-id, parseInt(this.dataset.matId), this.value)" 
                         class="bg-transparent font-bold cursor-pointer text-xs outline-none">
                         <option value="발주중" ${m.status === '발주중' ? 'selected' : ''}>발주중</option>
                         <option value="제작완료" ${m.status === '제작완료' ? 'selected' : ''}>제작완료</option>
@@ -623,9 +665,9 @@
                 <div key="${i}" class="flex justify-between items-center p-2 bg-blue-50 rounded text-xs group">
                     <div class="flex items-center gap-2 truncate flex-1 min-w-0">
                       ${lucide.createIcons()['LinkIcon'].toSvg({ size: 12, className: 'text-blue-500 flex-shrink-0' })}
-                      <span class="truncate text-blue-800 font-medium">${f.name}</span>
+                      <span class="truncate text-blue-800 font-medium">${f.name || '-'}</span>
                     </div>
-                    <a href="${f.url}" target="_blank" class="bg-white p-1 rounded text-blue-600 hover:bg-blue-100 flex-shrink-0 ml-2">${lucide.createIcons()['Download'].toSvg({ size: 12 })}</a>
+                    <a href="${f.url || '#'}" target="_blank" class="bg-white p-1 rounded text-blue-600 hover:bg-blue-100 flex-shrink-0 ml-2">${lucide.createIcons()['Download'].toSvg({ size: 12 })}</a>
                 </div>
              `).join('');
 
@@ -637,10 +679,10 @@
                     <div class="flex justify-between items-start gap-4 mb-6">
                         <div class="flex-1 min-w-0">
                           <div class="flex items-center gap-2 mb-2 flex-wrap">
-                            <span class="font-mono text-gray-400 text-sm">${order.displayId}</span>
+                            <span class="font-mono text-gray-400 text-sm">${order.displayId || 'ID 없음'}</span>
                             ${StatusBadgeHTML(order.status)}
                           </div>
-                          <h1 class="text-2xl md:text-3xl font-bold break-words leading-tight">${order.itemName}</h1>
+                          <h1 class="text-2xl md:text-3xl font-bold break-words leading-tight">${order.itemName || '작업명 없음'}</h1>
                         </div>
                         <button onclick="handleEditOrder('${order.id}')" class="bg-slate-100 px-3 py-2 rounded flex gap-2 hover:bg-slate-200 flex-shrink-0 text-sm font-bold">
                            ${lucide.createIcons()['Edit3'].toSvg({ size: 16 })} 수정
@@ -652,8 +694,8 @@
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
                                 <div>
                                     <div class="font-bold text-gray-400 uppercase text-xs mb-1">Client</div>
-                                    <div class="text-lg font-bold text-slate-800">${order.clientName}</div>
-                                    <div class="text-gray-500">${order.clientContact}</div>
+                                    <div class="text-lg font-bold text-slate-800">${order.clientName || '-'}</div>
+                                    <div class="text-gray-500">${order.clientContact || '-'}</div>
                                 </div>
                                 <div>
                                     <div class="font-bold text-gray-400 uppercase text-xs mb-1">Order Date</div>
@@ -661,7 +703,7 @@
                                 </div>
                                 <div>
                                     <div class="font-bold text-gray-400 uppercase text-xs mb-1">Delivery</div>
-                                    <div class="text-lg text-red-600 font-bold">${order.deliveryDate}</div>
+                                    <div class="text-lg text-red-600 font-bold">${order.deliveryDate || '-'}</div>
                                 </div>
                             </div>
                         </div>
@@ -715,7 +757,7 @@
                 try {
                     await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'orders', id));
                     showDialog('성공적으로 삭제되었습니다.');
-                    navigate('list');
+                    // navigate('list'); // Firestore listener will trigger re-render and navigate if selected order is deleted
                 } catch (error) {
                     console.error("Delete failed:", error);
                     showDialog(`삭제 실패: ${error.message}`, 'alert', '오류');
@@ -776,6 +818,9 @@
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 ${formHTML}
                             </div>
+                            <!-- File/Material management section (only for existing orders) -->
+                            ${!isNew ? renderFileAndMaterialManagement(data) : ''}
+
                             <div class="flex justify-end gap-2 pt-4 border-t">
                                 ${order ? `<button onclick="handleDeleteOrder('${order.id}')" class="text-red-500 px-4 font-bold text-sm hover:bg-red-50 rounded">삭제</button>` : ''}
                                 <button onclick="handleFormSave(${isNew})" class="bg-slate-800 text-white px-6 py-2 rounded font-bold hover:bg-slate-900">저장</button>
@@ -785,7 +830,113 @@
                 </div>
             `;
         }
+
+        function renderFileAndMaterialManagement(order) {
+            const matListHTML = (order.materials || []).map((m, i) => `
+                <div class="flex items-center gap-2 p-2 border-b last:border-0 hover:bg-gray-50">
+                    <div class="flex-1 text-sm">${m.supplier} - ${m.item} (${m.quantity})</div>
+                    <div class="text-xs text-gray-500">${m.status}</div>
+                    <button onclick="handleRemoveItem('materials', ${m.id})" class="text-red-400 hover:text-red-600 p-1 rounded">${lucide.createIcons()['Trash2'].toSvg({ size: 14 })}</button>
+                </div>
+            `).join('');
+
+             const fileListHTML = (order.files || []).map((f, i) => `
+                <div class="flex items-center gap-2 p-2 border-b last:border-0 hover:bg-gray-50">
+                    <div class="flex-1 text-sm truncate">${f.name}</div>
+                    <a href="${f.url}" target="_blank" class="text-blue-500 hover:text-blue-700 p-1 rounded">${lucide.createIcons()['Link'].toSvg({ size: 14 })}</a>
+                    <button onclick="handleRemoveItem('files', ${f.id})" class="text-red-400 hover:text-red-600 p-1 rounded">${lucide.createIcons()['Trash2'].toSvg({ size: 14 })}</button>
+                </div>
+            `).join('');
+
+            const supplierOptions = Object.keys(SUPPLIER_INFO).map(s => `<option value="${s}">${s}</option>`).join('');
+
+            return `
+                <div class="pt-6 mt-6 border-t space-y-6">
+                    <!-- 자재 관리 -->
+                    <div class="border p-4 rounded-xl bg-gray-50">
+                        <h3 class="font-bold mb-3 text-slate-700 flex items-center gap-2">${lucide.createIcons()['Package'].toSvg({ size: 18 })} 자재 발주 관리</h3>
+                        <div class="space-y-2 mb-4 max-h-40 overflow-y-auto">${matListHTML || '<div class="text-xs text-gray-400">등록된 발주 내역이 없습니다.</div>'}</div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                            <select id="mat-supplier" class="border p-2 rounded col-span-2">
+                                <option value="">거래처 선택</option>${supplierOptions}
+                            </select>
+                            <input id="mat-item" type="text" placeholder="품목명" class="border p-2 rounded" />
+                            <input id="mat-quantity" type="text" placeholder="수량" class="border p-2 rounded" />
+                        </div>
+                        <button onclick="handleAddItem('materials')" class="mt-3 w-full bg-indigo-500 text-white p-2 rounded text-sm font-bold hover:bg-indigo-600">자재 발주 추가</button>
+                    </div>
+
+                    <!-- 파일 관리 -->
+                     <div class="border p-4 rounded-xl bg-gray-50">
+                        <h3 class="font-bold mb-3 text-slate-700 flex items-center gap-2">${lucide.createIcons()['Link'].toSvg({ size: 18 })} 도면/파일 링크 관리</h3>
+                        <div class="space-y-2 mb-4 max-h-40 overflow-y-auto">${fileListHTML || '<div class="text-xs text-gray-400">등록된 파일이 없습니다.</div>'}</div>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                            <input id="file-name" type="text" placeholder="파일명 (예: Design V1.pdf)" class="border p-2 rounded" />
+                            <input id="file-url" type="url" placeholder="링크 (URL)" class="border p-2 rounded" />
+                        </div>
+                        <button onclick="handleAddItem('files')" class="mt-3 w-full bg-indigo-500 text-white p-2 rounded text-sm font-bold hover:bg-indigo-600">파일 링크 추가</button>
+                    </div>
+                </div>
+            `;
+        }
         
+        // Expose to global scope
+        window.handleAddItem = (type) => {
+            if (!state.selectedOrder) return;
+            let newItem = null;
+            let error = '';
+
+            if (type === 'materials') {
+                const supplier = document.getElementById('mat-supplier').value;
+                const item = document.getElementById('mat-item').value;
+                const quantity = document.getElementById('mat-quantity').value;
+                if (!supplier || !item || !quantity) { error = '모든 자재 항목을 입력하세요.'; } 
+                else {
+                    newItem = {
+                        id: Date.now(), // Use timestamp for unique ID in array
+                        supplier, item, quantity,
+                        status: '발주중',
+                        date: formatDate(new Date())
+                    };
+                }
+            } else if (type === 'files') {
+                const name = document.getElementById('file-name').value;
+                const url = document.getElementById('file-url').value;
+                if (!name || !url) { error = '모든 파일 항목을 입력하세요.'; }
+                else if (!url.startsWith('http')) { error = 'URL 형식(http/https)으로 입력해주세요.'; }
+                else {
+                    newItem = {
+                        id: Date.now(),
+                        name, url
+                    };
+                }
+            }
+
+            if (error) {
+                showDialog(error, 'alert', '입력 오류');
+                return;
+            }
+            
+            if (newItem) {
+                const updatedItems = [...(state.selectedOrder[type] || []), newItem];
+                state.selectedOrder[type] = updatedItems;
+                // Force re-render of the form to show the new item
+                renderApp(); 
+                showDialog(`${type === 'materials' ? '자재' : '파일'} 항목이 추가되었습니다. 저장 버튼을 눌러 확정하세요.`);
+            }
+        };
+
+        window.handleRemoveItem = (type, id) => {
+            if (!state.selectedOrder) return;
+
+            showDialog('정말 삭제하시겠습니까? 저장 버튼을 눌러 확정해야 합니다.', 'confirm', '항목 삭제 확인', () => {
+                const updatedItems = (state.selectedOrder[type] || []).filter(item => item.id !== id);
+                state.selectedOrder[type] = updatedItems;
+                renderApp(); // Force re-render of the form
+                showDialog(`${type === 'materials' ? '자재' : '파일'} 항목이 제거되었습니다. 저장 버튼을 눌러 확정하세요.`);
+            });
+        };
+
         window.handleFormSave = async (isNew) => {
             if (!state.user || !state.user.uid) {
                 showDialog("로그인 정보가 유효하지 않습니다. 다시 로그인해주세요.", 'alert', '오류');
@@ -800,20 +951,19 @@
                 if (el) data[id] = el.value;
             });
 
-            // Re-integrate existing data (materials/files) for updates
+            // Re-integrate materials/files from the state.selectedOrder for updates
             const existingOrder = state.selectedOrder;
             data.materials = existingOrder ? existingOrder.materials : [];
             data.files = existingOrder ? existingOrder.files : [];
             
-            // --- CRITICAL FIX: Data Sanitization ---
+            // --- CRITICAL FIX: Data Sanitization (to prevent saving undefined/null in arrays) ---
             const cleanData = {};
-            // 1. Copy data, excluding undefined/null values
             Object.keys(data).forEach(key => {
                 if (data[key] !== undefined && data[key] !== null) {
                     cleanData[key] = data[key];
                 }
             });
-            // 2. Ensure critical arrays exist (even if empty) to prevent Firestore errors
+            // Ensure critical arrays exist (even if empty) to prevent Firestore errors
             if(!cleanData.materials) cleanData.materials = [];
             if(!cleanData.files) cleanData.files = [];
             // --- END CRITICAL FIX ---
@@ -828,6 +978,8 @@
                     // Update existing document
                     await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'orders', existingOrder.id), cleanData);
                     showDialog("성공적으로 수정되었습니다.");
+                    // After saving, update the selected order in state from the global list and go to detail view
+                    state.selectedOrder = state.orders.find(o => o.id === existingOrder.id);
                     navigate('detail');
                 } else {
                     // Create new document
@@ -850,8 +1002,8 @@
         function renderMaterialManageView() {
             const suppliersData = getSuppliersData(state.orders);
 
-            const supplierListHTML = Object.keys(suppliersData).map(s => {
-                const items = suppliersData[s];
+            const supplierListHTML = Object.keys(SUPPLIER_INFO).map(s => {
+                const items = suppliersData[s] || [];
                 const pickupCnt = items.filter(m => m.status === '제작완료').length;
                 const activeCnt = items.filter(m => m.status === '발주중').length;
 
@@ -873,7 +1025,7 @@
             return `
                 <div class="flex h-full gap-4 animate-fade-in flex-col md:flex-row overflow-hidden pb-10 relative">
                     <div class="w-full md:w-1/3 overflow-y-auto space-y-2 pr-0 md:pr-2 max-h-[200px] md:max-h-full flex-shrink-0">
-                         <button class="w-full py-2 border-2 border-dashed border-indigo-300 text-indigo-600 font-bold rounded-lg mb-2 hover:bg-indigo-50 flex justify-center items-center gap-2">
+                         <button class="w-full py-2 border-2 border-dashed border-indigo-300 text-indigo-600 font-bold rounded-lg mb-2 hover:bg-indigo-50 flex justify-center items-center gap-2" disabled>
                            ${lucide.createIcons()['Plus'].toSvg({ size: 16 })} 빠른 발주 등록 (비활성화)
                         </button>
                         ${supplierListHTML}
@@ -889,7 +1041,7 @@
         window.renderSupplierDetail = (supplierName) => {
             const suppliersData = getSuppliersData(state.orders);
             const info = SUPPLIER_INFO[supplierName] || {};
-            const supplierMaterials = suppliersData[supplierName];
+            const supplierMaterials = suppliersData[supplierName] || []; // Ensure it's an array
 
             const materialsHTML = supplierMaterials.length === 0 ? '<div class="text-center text-gray-400 py-10 text-sm">해당 거래처에 발주된 내역이 없습니다.</div>' :
                 supplierMaterials.map((m, idx) => {
@@ -899,9 +1051,9 @@
                     return `
                         <div class="border rounded-lg p-3 flex justify-between items-center hover:bg-slate-50">
                             <div>
-                                <div class="font-bold text-slate-700 mb-1">${m.item} <span class="text-xs font-normal text-gray-500">(${m.quantity})</span></div>
-                                <div class="text-xs text-indigo-500 font-medium">Project: ${m.orderName}</div>
-                                <div class="text-xs text-gray-400 mt-1">${m.date} 발주</div>
+                                <div class="font-bold text-slate-700 mb-1">${m.item || '-'} <span class="text-xs font-normal text-gray-500">(${m.quantity || '-'})</span></div>
+                                <div class="text-xs text-indigo-500 font-medium">Project: ${m.orderName || '-'}</div>
+                                <div class="text-xs text-gray-400 mt-1">${m.date || '-'} 발주</div>
                             </div>
                             <select 
                                 onchange="handleMaterialStatusUpdate('${m.orderId}', ${m.id}, this.value)"
@@ -918,9 +1070,9 @@
                 <div class="p-4 border-b bg-slate-50">
                     <h2 class="font-bold text-lg text-slate-800 mb-1">${supplierName}</h2>
                     <div class="flex flex-col md:flex-row md:items-center gap-2 text-xs text-gray-500">
-                        <span class="flex items-center gap-1">${lucide.createIcons()['Phone'].toSvg({ size: 12 })} ${info.phone}</span>
+                        <span class="flex items-center gap-1">${lucide.createIcons()['Phone'].toSvg({ size: 12 })} ${info.phone || '-'}</span>
                         <span class="hidden md:inline">|</span>
-                        <span class="flex items-center gap-1">${lucide.createIcons()['MapPin'].toSvg({ size: 12 })} ${info.address}</span>
+                        <span class="flex items-center gap-1">${lucide.createIcons()['MapPin'].toSvg({ size: 12 })} ${info.address || '-'}</span>
                     </div>
                 </div>
                 <div class="flex-1 overflow-y-auto p-4 space-y-2">
@@ -933,11 +1085,14 @@
             const targetOrder = state.orders.find(o => o.id === orderId);
             if (!targetOrder) return;
 
+            // Deep clone and update the material array
             const updatedMats = targetOrder.materials.map(m => m.id === materialId ? {...m, status: newStatus} : m);
             
             try {
+                // Update the document in Firestore
                 await updateDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'orders', orderId), { materials: updatedMats });
                 showDialog("자재 상태가 업데이트되었습니다.");
+                // Firestore listener will automatically update the state and re-render the UI
             } catch (error) {
                 console.error("Material update failed:", error);
                 showDialog(`업데이트 실패: ${error.message}`, 'alert', '오류');
@@ -1001,7 +1156,8 @@
                         <div class="relative">
                             <button class="p-2 hover:bg-slate-100 rounded-full relative">
                                 ${lucide.createIcons()['Bell'].toSvg({ size: 18, className: 'text-slate-400' })}
-                                <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                                <!-- Notification dot placeholder -->
+                                <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full ${calculateStats(state.orders).urgent > 0 ? '' : 'hidden'}"></span> 
                             </button>
                         </div>
                     </div>
@@ -1044,30 +1200,66 @@
             }
         }
 
-        // --- Firebase Auth State Listener & Initial Load ---
-        auth.onAuthStateChanged(user => {
-            state.isAuthReady = true;
-
-            if (!state.user && localStorage.getItem('kkangtong_user')) {
-                if (user) {
-                    state.user = JSON.parse(localStorage.getItem('kkangtong_user'));
-                } else {
+        // --- INITIALIZATION FUNCTION ---
+        function initializeAppAndListeners() {
+            // 1. Check local storage for previous session (fast path rendering)
+            const storedUser = localStorage.getItem('kkangtong_user');
+            if (storedUser) {
+                try {
+                    state.user = JSON.parse(storedUser);
+                    state.view = 'dashboard';
+                } catch (e) {
+                    console.error("Local storage user data corrupted:", e);
                     localStorage.removeItem('kkangtong_user');
+                    state.user = null;
                 }
-            } else if (!user) {
-                state.user = null;
-            }
-
-            if (state.user && state.view === 'login') {
-                state.view = 'dashboard';
-            }
-
-            if(state.isAuthReady && state.user) {
-                listenToOrders();
             }
             
+            // Initial render (will show login or fast-path dashboard)
             renderApp();
-        });
+            
+            // 2. Set up Firebase Auth Listener
+            auth.onAuthStateChanged(user => {
+                state.isAuthReady = true;
+
+                if (!user) {
+                    // User signed out or anonymous session expired
+                    state.user = null;
+                    localStorage.removeItem('kkangtong_user');
+                    state.view = 'login';
+                    renderApp();
+                    return;
+                }
+
+                // If user object is null but we have a user from auth, means anonymous sign-in was successful
+                if (!state.user) {
+                    const storedData = localStorage.getItem('kkangtong_user');
+                    if (storedData) {
+                         // The anonymous sign in updated the auth state, re-pull role from local storage
+                         state.user = JSON.parse(storedData);
+                    } else {
+                         // Should not happen if login flow is followed, but fall back to force login
+                         state.view = 'login';
+                         renderApp();
+                         return;
+                    }
+                }
+
+                // 3. Start listening to data only when auth is confirmed and we have user roles
+                if (state.user) {
+                    listenToOrders();
+                }
+                
+                // Final render after auth state is confirmed (listens will trigger subsequent renders)
+                renderApp();
+            });
+            
+            // Initial icon loading to prevent delay on the first screen
+            lucide.createIcons(); 
+        }
+
+        // --- CRITICAL FIX: Ensure DOM is fully loaded before running init ---
+        window.addEventListener('DOMContentLoaded', initializeAppAndListeners);
 
     </script>
 </body>
