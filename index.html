@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>숨쉬는 깡통 - 관리 시스템</title>
+    <title>숨쉬는 깡통</title>
     
     <!-- 1. Tailwind CSS (디자인) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -20,7 +20,7 @@
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 
-    <!-- 3. Import Map (React 및 라이브러리 로드 설정) -->
+    <!-- 3. Import Map -->
     <script type="importmap">
     {
         "imports": {
@@ -34,7 +34,7 @@
     }
     </script>
 
-    <!-- 4. Babel (JSX 변환기) -->
+    <!-- 4. Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body class="bg-slate-100">
@@ -112,7 +112,7 @@
             }
         };
 
-        // --- Constants & Mock Data (오프라인/초기화용) ---
+        // --- Constants & Mock Data ---
         const COMPANY_INFO = {
             name: '숨쉬는 깡통',
             address: '경기도 포천시 군내면 유교리 243-7',
@@ -133,11 +133,11 @@
             {
                 id: 'mock-1',
                 displayId: 'ORD-24-101',
-                itemName: '테스트 작업 (오프라인)',
+                itemName: '테스트 작업 (오프라인 예시)',
                 clientName: '테스트 업체',
                 status: '제작중',
                 deliveryDate: new Date().toISOString().split('T')[0],
-                description: '서버 연결이 되지 않아 표시되는 예시 데이터입니다.',
+                description: '서버 연결이 원활하지 않아 표시되는 예시 데이터입니다.',
                 materials: []
             }
         ]; 
@@ -179,6 +179,8 @@
         const Card = ({ children, className = "", onClick }) => (
             <div onClick={onClick} className={`bg-white rounded-xl shadow-sm border border-slate-200 ${className}`}>{children}</div>
         );
+
+        const FileBox = ({size}) => <Package size={size}/>;
 
         // --- Login Gate Component ---
         const LoginView = ({ onLogin }) => {
@@ -232,8 +234,7 @@
             );
         };
 
-        // --- Sub Components ---
-        // (대부분의 서브 컴포넌트는 기존과 동일, App 로직에서 주요 수정 발생)
+        // --- Components (Restored) ---
 
         const Dashboard = ({ orders, stats, suppliers, onNavigate, isAdmin, currentUserId }) => {
             const [activeStat, setActiveStat] = useState(null);
@@ -444,28 +445,55 @@
 
         const ListView = ({ orders, onSelect, onAdd }) => {
             const [searchTerm, setSearchTerm] = useState('');
+            const [open, setOpen] = useState({ design: true, prod: true, done: false });
+            const groups = { design: [], prod: [], done: [] };
             
-            const filtered = orders.filter(o => (o.itemName || '').toLowerCase().includes(searchTerm.toLowerCase()));
-            
+            orders.filter(o => (o.itemName || '').toLowerCase().includes(searchTerm.toLowerCase())).forEach(o => {
+                if (['대기', '설계중'].includes(o.status)) groups.design.push(o);
+                else if (['제작중', '도장/마감'].includes(o.status)) groups.prod.push(o);
+                else groups.done.push(o);
+            });
+
+            const Section = ({ id, title, items }) => (
+                <div className="mb-4">
+                <div onClick={() => setOpen({ ...open, [id]: !open[id] })} className={`flex justify-between p-3 rounded cursor-pointer transition-colors ${open[id] ? 'bg-slate-800 text-white' : 'bg-white border hover:bg-slate-50'}`}>
+                    <span className="font-bold">{title} ({items.length})</span>{open[id] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                </div>
+                {open[id] && <div className="mt-2 pl-2 border-l-2 border-slate-200 space-y-2">
+                    {items.map(o => (
+                    <Card key={o.id} className="p-3 cursor-pointer hover:border-blue-500 bg-white transition-colors" onClick={() => onSelect(o)}>
+                        <div className="flex justify-between items-center mb-1">
+                        <span className="font-bold truncate mr-2">{o.itemName}</span>
+                        <StatusBadge status={o.status} />
+                        </div>
+                        <div className="text-xs text-gray-500 flex justify-between">
+                        <span>{o.clientName}</span>
+                        <span>{o.deliveryDate} 납품</span>
+                        </div>
+                    </Card>
+                    ))}
+                    {items.length === 0 && <div className="text-sm text-gray-400 p-2">항목 없음</div>}
+                </div>}
+                </div>
+            );
+
             return (
                 <div className="space-y-4 animate-fade-in pb-10">
                 <div className="flex gap-2 bg-white p-3 rounded-xl border shadow-sm sticky top-0 z-10">
                     <Search size={20} className="text-gray-400"/>
-                    <input className="flex-1 outline-none bg-transparent min-w-0" placeholder="검색..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                    <button onClick={onAdd} className="bg-slate-800 text-white px-3 py-1 rounded text-sm font-bold flex items-center gap-1 flex-shrink-0"><Plus size={16} /> 등록</button>
+                    <input 
+                    className="flex-1 outline-none bg-transparent min-w-0" 
+                    placeholder="작업명 검색..." 
+                    value={searchTerm} 
+                    onChange={e => setSearchTerm(e.target.value)} 
+                    />
+                    <button onClick={onAdd} className="bg-slate-800 text-white px-3 py-1 rounded text-sm font-bold flex items-center gap-1 flex-shrink-0">
+                    <Plus size={16} /> <span className="hidden sm:inline">작업등록</span>
+                    </button>
                 </div>
-                <div className="space-y-2">
-                    {filtered.map(o => (
-                        <Card key={o.id} className="p-3 cursor-pointer hover:border-blue-500 flex justify-between items-center" onClick={() => onSelect(o)}>
-                            <div>
-                                <div className="font-bold mb-1">{o.itemName}</div>
-                                <div className="text-xs text-gray-500">{o.clientName} | {o.deliveryDate}</div>
-                            </div>
-                            <StatusBadge status={o.status} />
-                        </Card>
-                    ))}
-                    {filtered.length === 0 && <div className="text-center py-10 text-gray-400">검색 결과가 없습니다.</div>}
-                </div>
+                <Section id="design" title="설계 단계" items={groups.design} />
+                <Section id="prod" title="제작 단계" items={groups.prod} />
+                <Section id="done" title="완료" items={groups.done} />
                 </div>
             );
         };
@@ -474,9 +502,17 @@
             if (!order) return null;
             const canEdit = isAdmin || order.userId === currentUserId;
             const [mat, setMat] = useState({ supplier: '', item: '', quantity: '', status: '발주중', date: new Date().toISOString().split('T')[0] });
+            const [link, setLink] = useState({ name: '', url: '' });
+            const [showSuggestions, setShowSuggestions] = useState(false);
+            const supplierOptions = Object.keys(SUPPLIER_INFO);
+            const filteredSuppliers = supplierOptions.filter(s => s.includes(mat.supplier));
+
+            const updateOrder = (newData) => {
+                onUpdate({ ...order, ...newData });
+            };
 
             return (
-                <div className="h-full overflow-y-auto animate-fade-in pb-10">
+                <div className="h-full overflow-y-auto animate-fade-in pb-10" onClick={()=>setShowSuggestions(false)}>
                     <div className="flex items-center gap-2 text-slate-500 cursor-pointer mb-4" onClick={onBack}>
                         <ChevronLeft size={20}/> <span className="text-sm font-bold">목록</span>
                     </div>
@@ -494,26 +530,102 @@
                         <div><div className="text-gray-400 text-xs uppercase mb-1">Memo</div><div className="text-slate-700 whitespace-pre-wrap">{order.description || '-'}</div></div>
                     </Card>
 
+                    {/* Files Section (Compact) */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col mb-4">
+                        <div className="flex justify-between items-center mb-3">
+                            <h3 className="font-bold text-sm text-slate-700 flex gap-2"><FileBox size={16} /> 도면/파일</h3>
+                            <span className="text-xs text-gray-400">{(order.files || []).length}개</span>
+                        </div>
+                        
+                        <div className="flex-1 space-y-2 mb-3 max-h-[150px] overflow-y-auto">
+                            {(order.files || []).length === 0 && <div className="text-center text-xs text-gray-400 py-2">등록된 파일이 없습니다.</div>}
+                            {(order.files || []).map((f, i) => (
+                            <div key={i} className="flex justify-between items-center p-2 bg-blue-50 rounded text-xs group">
+                                <div className="flex items-center gap-2 truncate flex-1 min-w-0">
+                                {f.name.endsWith('.pdf') ? <FileText size={12} className="text-red-500 flex-shrink-0"/> : <File size={12} className="text-blue-500 flex-shrink-0"/>}
+                                <span className="truncate text-blue-800 font-medium">{f.name}</span>
+                                </div>
+                                <a href={f.url} target="_blank" rel="noreferrer" className="bg-white p-1 rounded text-blue-600 hover:bg-blue-100 flex-shrink-0 ml-2">
+                                <Download size={12} />
+                                </a>
+                            </div>
+                            ))}
+                        </div>
+
+                        {/* Compact Add Form */}
+                        {canEdit && (
+                        <div className="flex gap-1 border-t pt-2">
+                            <input placeholder="파일명" className="w-1/3 border p-1.5 rounded text-xs bg-gray-50" value={link.name} onChange={e => setLink({ ...link, name: e.target.value })} />
+                            <input placeholder="URL" className="flex-1 border p-1.5 rounded text-xs bg-gray-50" value={link.url} onChange={e => setLink({ ...link, url: e.target.value })} />
+                            <button onClick={() => {
+                                if (!link.name || !link.url) return;
+                                updateOrder({ files: [...(order.files || []), { ...link, id: Date.now() }] });
+                                setLink({ name: '', url: '' });
+                            }} className="bg-slate-700 text-white px-3 rounded text-xs font-bold hover:bg-slate-800">등록</button>
+                        </div>
+                        )}
+                    </div>
+
                     <h3 className="font-bold mb-2 flex items-center gap-2"><Package size={18}/> 자재 발주 내역</h3>
                     <Card className="p-0 overflow-hidden mb-10">
                         <table className="w-full text-sm text-left">
                             <thead className="bg-slate-50 border-b"><tr><th className="p-2">거래처</th><th className="p-2">품목</th><th className="p-2">상태</th></tr></thead>
                             <tbody>
                                 {(order.materials || []).map((m, i) => (
-                                    <tr key={i} className="border-b"><td className="p-2 font-bold">{m.supplier}</td><td className="p-2">{m.item} ({m.quantity})</td><td className="p-2"><span className="text-xs bg-gray-100 px-2 py-1 rounded">{m.status}</span></td></tr>
+                                    <tr key={i} className="border-b">
+                                        <td className="p-2 font-bold">{m.supplier}</td>
+                                        <td className="p-2">{m.item} ({m.quantity})</td>
+                                        <td className="p-2">
+                                            <select 
+                                                value={m.status} 
+                                                className="bg-transparent font-bold cursor-pointer text-xs outline-none" 
+                                                disabled={!canEdit}
+                                                onChange={(e) => {
+                                                const updated = order.materials.map(x => x.id === m.id ? { ...x, status: e.target.value } : x);
+                                                updateOrder({ materials: updated });
+                                                }}
+                                            >
+                                                <option>발주중</option><option>제작완료</option><option>입고완료</option>
+                                            </select>
+                                        </td>
+                                    </tr>
                                 ))}
                             </tbody>
                         </table>
                         {canEdit && (
-                            <div className="p-3 bg-slate-50 border-t flex gap-2 flex-wrap">
-                                <input placeholder="거래처" className="border p-2 rounded text-sm flex-1" value={mat.supplier} onChange={e=>setMat({...mat, supplier:e.target.value})}/>
-                                <input placeholder="품목" className="border p-2 rounded text-sm flex-1" value={mat.item} onChange={e=>setMat({...mat, item:e.target.value})}/>
-                                <input placeholder="수량" className="border p-2 rounded text-sm w-20" value={mat.quantity} onChange={e=>setMat({...mat, quantity:e.target.value})}/>
+                            <div className="p-3 bg-slate-50 border-t">
+                                <div className="text-xs font-bold text-slate-500 mb-2">자재 추가</div>
+                                <div className="flex flex-col md:flex-row gap-2 mb-2 items-start">
+                                    <div className="relative flex-1 min-w-0 w-full" onClick={e=>e.stopPropagation()}>
+                                    <input 
+                                        placeholder="거래처 (클릭하여 선택)" 
+                                        className="border p-2 rounded w-full text-sm" 
+                                        value={mat.supplier} 
+                                        onFocus={()=>setShowSuggestions(true)}
+                                        onChange={e => {
+                                        setMat({ ...mat, supplier: e.target.value });
+                                        setShowSuggestions(true);
+                                        }} 
+                                    />
+                                    {showSuggestions && filteredSuppliers.length > 0 && (
+                                        <ul className="absolute z-50 left-0 top-full mt-1 w-full bg-white border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                                        {filteredSuppliers.map((s, idx) => (
+                                            <li key={idx} className="p-2 text-sm hover:bg-indigo-50 cursor-pointer text-slate-700 border-b last:border-0" onClick={() => { setMat({ ...mat, supplier: s }); setShowSuggestions(false); }}>
+                                            {s}
+                                            </li>
+                                        ))}
+                                        </ul>
+                                    )}
+                                    </div>
+                                    <input placeholder="품목명" className="border p-2 rounded flex-1 text-sm min-w-0 w-full" value={mat.item} onChange={e => setMat({ ...mat, item: e.target.value })} />
+                                    <input placeholder="수량" className="border p-2 rounded w-full md:w-20 text-sm" value={mat.quantity} onChange={e => setMat({ ...mat, quantity: e.target.value })} />
+                                </div>
                                 <button onClick={()=>{
                                     if(!mat.supplier || !mat.item) return;
                                     onUpdate({ materials: [...(order.materials||[]), {...mat, id:Date.now()}] });
                                     setMat({...mat, supplier:'', item:'', quantity:''});
-                                }} className="bg-slate-800 text-white px-4 py-2 rounded text-sm font-bold">추가</button>
+                                    setShowSuggestions(false);
+                                }} className="bg-slate-800 text-white px-4 py-2 rounded text-sm font-bold w-full">추가</button>
                             </div>
                         )}
                     </Card>
@@ -528,6 +640,7 @@
                 deliveryDate: '', status: '대기', description: '', clientContact: '', files: []
             });
             const [isAiSuggesting, setIsAiSuggesting] = useState(false);
+            const fileInputRef = useRef(null);
 
             const canEdit = !order || isAdmin || order.userId === currentUserId;
 
@@ -538,6 +651,18 @@
                 const suggestion = await callGemini(prompt);
                 setData(prev => ({ ...prev, description: suggestion }));
                 setIsAiSuggesting(false);
+            };
+
+            const handleFileChange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                const mockFile = { id: Date.now(), name: file.name, url: '#' };
+                setData(prev => ({ ...prev, files: [...(prev.files || []), mockFile] }));
+                }
+            };
+
+            const removeFile = (fileId) => {
+                setData(prev => ({ ...prev, files: prev.files.filter(f => f.id !== fileId) }));
             };
 
             if (!canEdit) return <div className="p-10 text-center">수정 권한이 없습니다.<button onClick={onCancel} className="block mx-auto mt-4 bg-gray-200 px-4 py-2 rounded">돌아가기</button></div>;
@@ -564,6 +689,28 @@
                                 </div>
                                 <textarea className="border p-2 rounded w-full h-24" value={data.description} onChange={e=>setData({...data, description:e.target.value})}/>
                             </div>
+
+                            {/* File Attachment Section */}
+                            <div className="border-t pt-4 mt-2">
+                                <label className="text-xs font-bold text-gray-500 mb-2 block">도면 / 파일 첨부</label>
+                                <div className="space-y-2">
+                                {(data.files || []).map(f => (
+                                    <div key={f.id} className="flex justify-between items-center p-2 bg-slate-50 rounded border text-sm">
+                                    <div className="flex items-center gap-2 truncate">
+                                        <Paperclip size={14} className="text-gray-400"/>
+                                        <span className="truncate">{f.name}</span>
+                                    </div>
+                                    <button onClick={() => removeFile(f.id)} className="text-red-500 hover:text-red-700"><X size={14}/></button>
+                                    </div>
+                                ))}
+                                </div>
+                                <div className="mt-2 flex items-center gap-2">
+                                <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
+                                <button onClick={() => fileInputRef.current.click()} className="text-sm bg-gray-100 border border-gray-300 px-3 py-1.5 rounded flex items-center gap-2 hover:bg-gray-200">
+                                    <Plus size={14}/> 파일 추가
+                                </button>
+                                </div>
+                            </div>
                         </div>
                         <div className="flex justify-end gap-2 pt-4 border-t">
                             {order && <button onClick={()=>onDelete(order.id)} className="text-red-500 text-sm font-bold px-4">삭제</button>}
@@ -572,6 +719,205 @@
                     </Card>
                 </div>
             );
+        };
+
+        // --- Missing Components Restored: MaterialManageView, CalendarView ---
+
+        const MaterialManageView = ({ suppliers, orders, onUpdateOrder }) => {
+            const [selectedSupplier, setSelectedSupplier] = useState(null);
+            const [isCustomMode, setIsCustomMode] = useState(false);
+            const info = SUPPLIER_INFO[selectedSupplier];
+            const [quickAdd, setQuickAdd] = useState(false);
+            const [newMat, setNewMat] = useState({ orderId: '', item: '', quantity: '', status: '발주중', supplier: '' });
+
+            useEffect(() => { 
+                if (selectedSupplier && !isCustomMode) {
+                setNewMat(prev => ({ ...prev, supplier: selectedSupplier }));
+                }
+            }, [selectedSupplier, isCustomMode]);
+
+            const handleQuickAdd = async () => {
+                if(!newMat.item) return alert("품목을 입력하세요");
+                
+                let targetOrder = orders.find(o => o.id === newMat.orderId);
+                
+                if (!targetOrder && !newMat.orderId) {
+                if(window.confirm("선택된 프로젝트가 없습니다. '기타 발주' 항목으로 새로 만들까요?")) {
+                    const miscTask = {
+                        id: `misc-${Date.now()}`,
+                        itemName: '기타 자재 발주',
+                        clientName: '내부',
+                        status: '제작중',
+                        createdAt: new Date(), 
+                        deadline: new Date().toISOString().split('T')[0],
+                        materials: []
+                    };
+                    targetOrder = miscTask;
+                } else {
+                    return;
+                }
+                }
+
+                const finalSupplier = isCustomMode ? newMat.supplier : selectedSupplier;
+                if(!finalSupplier) return alert("거래처를 입력하거나 선택하세요.");
+
+                const materialData = {
+                id: Date.now(), 
+                supplier: finalSupplier, 
+                item: newMat.item,
+                quantity: newMat.quantity, 
+                status: '발주중', 
+                date: new Date().toISOString().split('T')[0]
+                };
+
+                const updatedMaterials = [...(targetOrder.materials || []), materialData];
+                await onUpdateOrder({ ...targetOrder, materials: updatedMaterials });
+                
+                setQuickAdd(false);
+                setNewMat({ ...newMat, item: '', quantity: '' });
+                alert("발주가 등록되었습니다!");
+            };
+
+            return (
+                <div className="flex h-full gap-4 animate-fade-in flex-col md:flex-row overflow-hidden">
+                <div className="w-full md:w-1/3 overflow-y-auto space-y-2 pr-0 md:pr-2 max-h-[200px] md:max-h-full flex-shrink-0">
+                    <div onClick={() => { setIsCustomMode(true); setSelectedSupplier(null); setNewMat(prev=>({...prev, supplier: ''})); }} className={`p-3 border rounded-lg cursor-pointer transition-all flex items-center gap-2 ${isCustomMode ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
+                    <Plus size={16} />
+                    <span className="font-bold">직접 입력 (새 거래처)</span>
+                    </div>
+                    {Object.keys(suppliers).map(s => {
+                    const items = suppliers[s];
+                    const pickupCnt = items.filter(m => m.status === '제작완료').length;
+                    const activeCnt = items.filter(m => m.status === '발주중').length;
+                    return (
+                        <div key={s} onClick={() => { setSelectedSupplier(s); setIsCustomMode(false); }} className={`p-3 border rounded-lg cursor-pointer transition-all ${selectedSupplier === s && !isCustomMode ? 'bg-slate-800 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="font-bold">{s}</span>
+                            {pickupCnt > 0 && <span className="bg-indigo-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold animate-pulse">회수 {pickupCnt}</span>}
+                        </div>
+                        <div className="text-xs opacity-70">작업중 {activeCnt}건 / 총 {items.length}건</div>
+                        </div>
+                    )
+                    })}
+                </div>
+
+                <div className="w-full md:w-2/3 bg-white border rounded-xl p-4 md:p-6 flex flex-col overflow-hidden">
+                    {selectedSupplier || isCustomMode ? <>
+                    <div className="mb-4 pb-4 border-b flex-shrink-0">
+                        <div className="flex justify-between items-start mb-2">
+                        {isCustomMode ? (
+                            <input className="text-2xl font-bold border-b border-gray-300 focus:border-indigo-500 outline-none placeholder-gray-300" placeholder="거래처명 입력" value={newMat.supplier} onChange={e => setNewMat({...newMat, supplier: e.target.value})}/>
+                        ) : (
+                            <h2 className="text-2xl font-bold truncate">{selectedSupplier}</h2>
+                        )}
+                        <button onClick={() => setQuickAdd(!quickAdd)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold flex items-center gap-1 flex-shrink-0"><Plus size={14} /> 자재 등록</button>
+                        </div>
+                        {!isCustomMode && info ? (
+                        <div className="flex flex-wrap gap-4 text-xs md:text-sm text-gray-600 bg-slate-50 p-3 rounded">
+                            <div className="flex items-center gap-1"><Phone size={14} /> {info.phone}</div>
+                            <div className="flex items-center gap-1"><MapPin size={14} /> {info.address}</div>
+                        </div>
+                        ) : !isCustomMode ? <div className="text-sm text-gray-400">연락처 정보가 등록되지 않았습니다.</div> : null}
+                    </div>
+
+                    {(quickAdd || isCustomMode) && (
+                        <div className="mb-4 p-3 bg-indigo-50 rounded border border-indigo-100 animate-fade-in flex-shrink-0">
+                        <div className="text-sm font-bold text-indigo-800 mb-2">새 자재 발주 추가</div>
+                        <div className="flex flex-col md:flex-row gap-2 mb-2">
+                            <select className="border p-2 rounded flex-1 text-sm min-w-0" value={newMat.orderId} onChange={e => setNewMat({ ...newMat, orderId: e.target.value })}>
+                            <option value="">프로젝트 선택 (없으면 기타)</option>
+                            {orders.filter(o => !['납품완료'].includes(o.status)).map(o => <option key={o.id} value={o.id}>{o.itemName}</option>)}
+                            </select>
+                            <input placeholder="품목명" className="border p-2 rounded flex-1 text-sm min-w-0" value={newMat.item} onChange={e => setNewMat({ ...newMat, item: e.target.value })} />
+                            <input placeholder="수량" className="border p-2 rounded w-full md:w-20 text-sm" value={newMat.quantity} onChange={e => setNewMat({ ...newMat, quantity: e.target.value })} />
+                        </div>
+                        <button onClick={handleQuickAdd} className="w-full bg-indigo-600 text-white py-2 rounded text-sm font-bold hover:bg-indigo-700">등록하기</button>
+                        </div>
+                    )}
+
+                    <div className="flex-1 overflow-y-auto">
+                        <table className="w-full text-sm text-left min-w-[300px]">
+                        <thead className="bg-slate-50 border-b sticky top-0 z-10"><tr><th className="p-2">상태</th><th className="p-2">품목/수량</th><th className="p-2 hidden md:table-cell">관련 프로젝트</th><th className="p-2 text-right">관리</th></tr></thead>
+                        <tbody>
+                            {(!isCustomMode && suppliers[selectedSupplier]) ? suppliers[selectedSupplier].map((m, i) => (
+                            <tr key={i} className="border-b hover:bg-slate-50">
+                            <td className="p-2"><MaterialStatusBadge status={m.status} /></td>
+                            <td className="p-2"><div className="font-bold text-slate-700">{m.item}</div><div className="text-xs text-gray-500">{m.quantity}</div><div className="md:hidden text-xs text-indigo-500 mt-1">{m.orderName}</div></td>
+                            <td className="p-2 hidden md:table-cell text-gray-500 text-xs">{m.orderName}</td>
+                            <td className="p-2 text-right">
+                                {m.status === '제작완료' && (
+                                <button onClick={async () => {
+                                    const order = orders.find(o => o.id === m.orderId);
+                                    if (order) {
+                                    const updated = order.materials.map(x => x.id === m.id ? { ...x, status: '입고완료' } : x);
+                                    await onUpdateOrder({ ...order, materials: updated });
+                                    }
+                                }} className="bg-green-500 text-white px-2 py-1 rounded text-xs font-bold inline-flex items-center gap-1 hover:bg-green-600">
+                                    <CheckCircle2 size={12} /> 회수
+                                </button>
+                                )}
+                            </td>
+                            </tr>
+                        )) : isCustomMode ? (
+                            <tr><td colSpan="4" className="p-4 text-center text-gray-400">등록된 자재 내역이 없습니다. 위에서 새로 등록해보세요!</td></tr>
+                        ) : null}
+                        </tbody>
+                        </table>
+                    </div>
+                    </> : <div className="flex h-full items-center justify-center text-gray-400">좌측에서 거래처를 선택하거나 '직접 입력'을 누르세요.</div>}
+                </div>
+                </div>
+            );
+        };
+
+        const CalendarView = ({ orders, onSelect }) => {
+            const [date, setDate] = useState(new Date());
+            const days = [];
+            const year = date.getFullYear();
+            const month = date.getMonth();
+            const firstDay = new Date(year, month, 1).getDay();
+            const lastDate = new Date(year, month + 1, 0).getDate();
+            
+            for (let i = 0; i < firstDay; i++) days.push(null);
+            for (let i = 1; i <= lastDate; i++) days.push(new Date(year, month, i));
+
+            return (
+                <div className="h-full flex flex-col animate-fade-in pb-10">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-bold">{year}년 {month + 1}월</h2>
+                    <div className="flex gap-2">
+                    <button onClick={() => setDate(new Date(year, month - 1, 1))} className="p-1 hover:bg-slate-200 rounded"><ChevronLeft /></button>
+                    <button onClick={() => setDate(new Date())} className="text-sm border px-2 rounded hover:bg-slate-50">오늘</button>
+                    <button onClick={() => setDate(new Date(year, month + 1, 1))} className="p-1 hover:bg-slate-200 rounded"><ChevronRight /></button>
+                    </div>
+                </div>
+                <div className="flex-1 bg-white border rounded-xl overflow-hidden flex flex-col shadow-sm">
+                    <div className="grid grid-cols-7 bg-slate-50 border-b text-center py-2 font-bold text-slate-600 text-sm">
+                    <div className="text-red-500">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div className="text-blue-500">토</div>
+                    </div>
+                    <div className="flex-1 grid grid-cols-7 grid-rows-5">
+                    {days.map((d, i) => {
+                        if (!d) return <div key={i} className="bg-slate-50 border-r border-b"></div>;
+                        const dateStr = d.toISOString().split('T')[0];
+                        const events = orders.filter(o => o.deliveryDate === dateStr);
+                        const isToday = dateStr === new Date().toISOString().split('T')[0];
+                        return (
+                        <div key={i} className={`border-r border-b p-1 bg-white min-h-[60px] flex flex-col ${isToday ? 'bg-blue-50' : ''}`}>
+                            <div className={`text-xs font-bold mb-1 text-center ${isToday ? 'text-blue-600' : 'text-gray-500'}`}>{d.getDate()}</div>
+                            <div className="space-y-1 overflow-y-auto flex-1 no-scrollbar">
+                            {events.map(ev => (
+                                <div key={ev.id} onClick={() => onSelect(ev)} className="text-[10px] p-1 bg-red-50 text-red-800 border-l-2 border-red-500 truncate cursor-pointer rounded hover:opacity-80">
+                                {ev.itemName}
+                                </div>
+                            ))}
+                            </div>
+                        </div>
+                        )
+                    })}
+                    </div>
+                </div>
+                </div>
+            )
         };
 
         // --- Main App Component ---
@@ -753,7 +1099,9 @@
                         <nav className="flex-1 p-2 space-y-2">
                             {[
                                 { id: 'dashboard', icon: LayoutDashboard, label: '현황' },
+                                { id: 'calendar', icon: CalendarIcon, label: '스케줄러' },
                                 { id: 'list', icon: FileText, label: '작업 목록' },
+                                { id: 'materials', icon: Truck, label: '발주 관리' },
                             ].map(m => (
                                 <button key={m.id} onClick={() => { setCurrentView(m.id); setSelectedOrder(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded ${currentView === m.id ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}>
                                     <m.icon size={20} /><span className="hidden md:block">{m.label}</span>
@@ -769,12 +1117,25 @@
                     </div>
 
                     <main className="flex-1 flex flex-col overflow-hidden relative bg-slate-100">
+                        <header className="h-14 md:h-16 bg-white border-b flex items-center justify-between px-4 md:px-6 shadow-sm flex-shrink-0">
+                            <h2 className="font-bold text-lg md:text-xl uppercase text-slate-800">
+                                {currentView === 'dashboard' && '작업 현황'}
+                                {currentView === 'calendar' && '스케줄러'}
+                                {currentView === 'list' && '작업 목록'}
+                                {currentView === 'materials' && '자재/발주 관리'}
+                                {currentView === 'detail' && '작업 상세'}
+                                {currentView === 'form' && (selectedOrder ? '작업 수정' : '새 작업 등록')}
+                            </h2>
+                        </header>
+
                         <div className="h-full overflow-y-auto p-4 md:p-6">
                             <div className="max-w-5xl mx-auto">
                                 {currentView === 'dashboard' && <Dashboard orders={orders} stats={stats} suppliers={suppliers} onNavigate={handleNavigate} isAdmin={isAdmin} currentUserId={user?.uid} />}
+                                {currentView === 'calendar' && <CalendarView orders={orders} onSelect={handleNavigate} />}
                                 {currentView === 'list' && !selectedOrder && <ListView orders={orders} onSelect={handleNavigate} onAdd={() => { setSelectedOrder(null); setCurrentView('form'); }} />}
                                 {currentView === 'detail' && <DetailView order={selectedOrder} onBack={() => { setSelectedOrder(null); setCurrentView('list'); }} onUpdate={(data, view) => { if(view) setCurrentView(view); else saveOrder(data); }} isAdmin={isAdmin} currentUserId={user?.uid} />}
                                 {currentView === 'form' && <FormView order={selectedOrder} onSave={saveOrder} onDelete={deleteOrder} onCancel={() => { setSelectedOrder(null); setCurrentView('list'); }} isAdmin={isAdmin} currentUserId={user?.uid} />}
+                                {currentView === 'materials' && <MaterialManageView suppliers={suppliers} orders={orders} onUpdateOrder={saveOrder} />}
                             </div>
                         </div>
                     </main>
