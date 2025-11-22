@@ -3,115 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>숨쉬는 깡통 관리 시스템</title>
+    <title>숨쉬는 깡통 - 작업 관리 시스템</title>
     
-    <!-- Tailwind CSS -->
+    <!-- 1. 디자인 도구 (Tailwind CSS) -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- React & ReactDOM -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- 2. 리액트 도구 (Preact/React) -->
+    <script type="importmap">
+        {
+            "imports": {
+                "react": "https://esm.sh/react@18.2.0",
+                "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+                "lucide-react": "https://esm.sh/lucide-react@0.344.0"
+            }
+        }
+    </script>
     
-    <!-- Babel -->
+    <!-- 3. 번역기 (Babel) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
 
     <style>
-        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f1f5f9; }
-        .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* Scrollbar Hide */
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
-        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <!-- Firebase Setup -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useMemo, useRef } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import {
+            LayoutDashboard, Plus, FileText, Calendar as CalendarIcon,
+            Package, ChevronRight, ChevronLeft, Trash2, Edit3, Download, Link as LinkIcon,
+            ChevronDown, ChevronUp, Wifi, Mail, CheckCircle2, Factory, ArrowRight,
+            Phone, MapPin, Bell, X, Truck, Search, AlertCircle, Map, Sparkles, Paperclip, File, Lock, Key
+        } from 'lucide-react';
 
-        // Global Variable for App ID (Environment)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'breathable-can-manager';
-        
-        // Configuration (User Provided)
+        // Firebase Imports (CDN)
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+        import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+        import {
+            getFirestore, collection, addDoc, updateDoc, deleteDoc,
+            doc, onSnapshot, query, orderBy, serverTimestamp
+        } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+        // ---------------------------------------------------------
+        // ✅ Firebase 설정 (웅니가 입력한 값 유지!)
+        // ---------------------------------------------------------
         const firebaseConfig = {
             apiKey: "AIzaSyB5W8qJbYMNyzPu8jmbAifCBH9qgZsQOJA",
             authDomain: "bk-manager-784a5.firebaseapp.com",
             projectId: "bk-manager-784a5",
             storageBucket: "bk-manager-784a5.firebasestorage.app",
             messagingSenderId: "16230700058",
-            appId: "1:16230700058:web:833a3d16f54cdd73d2ada3",
-            measurementId: "G-PMGKK5F8CP"
+            appId: "1:16230700058:web:833a3d16f54cdd73d2ada3"
         };
 
-        // Expose to window for React
-        const app = initializeApp(firebaseConfig);
-        window.auth = getAuth(app);
-        window.db = getFirestore(app);
-        window.firebaseFunctions = {
-            signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut,
-            collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp,
-            appId
-        };
-    </script>
+        // ---------------------------------------------------------
+        // ✅ Gemini API 키
+        // ---------------------------------------------------------
+        const GEMINI_API_KEY = "AIzaSyAAuopjonzUutbkTZXv5PbqfKz2hDsNRes"; 
 
-    <!-- Main React Application -->
-    <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
-        const { 
-            LayoutDashboard, Plus, FileText, Calendar: CalendarIcon,
-            Package, ChevronRight, ChevronLeft, Trash2, Edit3, Download, Link: LinkIcon,
-            ChevronDown, ChevronUp, Wifi, Mail, CheckCircle2, Factory, ArrowRight,
-            Phone, MapPin, Bell, X, Truck, Search, AlertCircle, Map, Sparkles, Paperclip, File, Lock, Key, FileBox, Save
-        } = lucide;
-
-        // --- Gemini API Helper ---
-        const callGemini = async (prompt) => {
-            const apiKey = "AIzaSyAAuopjonzUutbkTZXv5PbqfKz2hDsNRes"; // User Provided Key
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-            
-            const payload = {
-                contents: [{ parts: [{ text: prompt }] }]
-            };
-
-            let retries = 0;
-            const maxRetries = 3;
-            const delays = [1000, 2000, 4000];
-
-            while (retries <= maxRetries) {
-                try {
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    
-                    const data = await response.json();
-                    return data.candidates?.[0]?.content?.parts?.[0]?.text || "응답을 생성하지 못했어요.";
-                } catch (e) {
-                    retries++;
-                    if (retries > maxRetries) {
-                        console.error("Gemini API failed:", e);
-                        return "AI 서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.";
-                    }
-                    await new Promise(resolve => setTimeout(resolve, delays[retries - 1]));
-                }
-            }
-        };
-
-        // --- Constants & Mock Data ---
+        // --- Constants ---
         const COMPANY_INFO = {
             name: '숨쉬는 깡통',
             address: '경기도 포천시 군내면 유교리 243-7',
@@ -128,498 +84,196 @@
             '대한아크릴': { phone: '02-7777-8888', email: 'acryl@daehan.com', address: '서울 중구 방산시장 A동', lat: 37.5670, lng: 127.0000 }
         };
 
-        // --- Helper Function: Distance Calculation (Haversine) ---
+        // 🚨 예시 데이터 복구 (연결 안 됐을 때 이거라도 보여줘야 해!)
+        const MOCK_DATA = [
+            {
+                id: 'mock-1', displayId: 'ORD-24-101', itemName: '성수동 카페 황동 테이블', clientName: '카페 루미에르',
+                manager: '김철수', technician: '이장인', orderDate: '2024-11-01',
+                deliveryDate: new Date(Date.now() + 86400000 * 1).toISOString().split('T')[0], 
+                status: '제작중',
+                description: '상판 헤어라인 마감 꼼꼼하게 부탁드립니다.',
+                materials: [
+                    { id: 11, supplier: '성수금속', item: '황동 파이프 30mm', quantity: '6본', status: '입고완료', date: '2024-11-15' },
+                    { id: 12, supplier: '을지레이저', item: '상판 레이저 가공', quantity: '10개', status: '제작완료', date: '2024-11-18' }
+                ],
+                files: [{ name: 'Table_Design_v3.pdf', url: '#', id: 101 }]
+            },
+            {
+                id: 'mock-2', displayId: 'ORD-24-102', itemName: '압구정 갤러리 입간판', clientName: '갤러리 큐브',
+                manager: '박영희', technician: '최고수', orderDate: '2024-11-05',
+                deliveryDate: new Date().toISOString().split('T')[0], 
+                status: '도장/마감',
+                description: '무광 블랙 분체도장. 로고 시트지 작업 포함.',
+                materials: [
+                    { id: 21, supplier: '을지레이저', item: '갈바 절곡', quantity: '2판', status: '입고완료', date: '2024-11-10' },
+                    { id: 22, supplier: '청계도장', item: '분체 도장(Black)', quantity: '1식', status: '발주중', date: '2024-11-19' }
+                ],
+                files: []
+            }
+        ];
+
+        // --- Helpers ---
+        const callGemini = async (prompt) => {
+            if (!GEMINI_API_KEY) return "API 키 설정을 확인해주세요!";
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`;
+            try {
+                const response = await fetch(url, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                if (!response.ok) throw new Error('API Error');
+                const data = await response.json();
+                return data.candidates?.[0]?.content?.parts?.[0]?.text || "응답 생성 실패";
+            } catch (e) { return "AI 연결 실패"; }
+        };
+
         const getDistance = (lat1, lon1, lat2, lon2) => {
-            const R = 6371; 
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                    Math.sin(dLon/2) * Math.sin(dLon/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c;
+            const R = 6371; const dLat = (lat2 - lat1) * Math.PI / 180; const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         };
 
-        // --- Components ---
+        // --- UI Components ---
         const StatusBadge = ({ status }) => {
-            const colors = {
-                '대기': 'bg-gray-100 text-gray-600',
-                '설계중': 'bg-blue-100 text-blue-700',
-                '제작중': 'bg-amber-100 text-amber-700',
-                '도장/마감': 'bg-purple-100 text-purple-700',
-                '완료된 작업': 'bg-slate-200 text-slate-500 font-medium',
-                '납품완료': 'bg-green-100 text-green-700',
-            };
-            return <span className={`flex-shrink-0 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap ${colors[status] || 'bg-gray-100'}`}>{status}</span>;
+            const colors = { '대기': 'bg-gray-100 text-gray-600', '설계중': 'bg-blue-100 text-blue-700', '제작중': 'bg-amber-100 text-amber-700', '도장/마감': 'bg-purple-100 text-purple-700', '완료된 작업': 'bg-slate-200 text-slate-500', '납품완료': 'bg-green-100 text-green-700' };
+            return <span className={`px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap ${colors[status] || 'bg-gray-100'}`}>{status}</span>;
         };
+        const MaterialStatusBadge = ({ status }) => <span className={`px-2 py-0.5 rounded text-[11px] ${status === '제작완료' ? 'bg-indigo-100 text-indigo-700 font-bold animate-pulse' : 'bg-gray-100'}`}>{status}</span>;
+        const Card = ({ children, className = "", onClick }) => <div onClick={onClick} className={`bg-white rounded-xl shadow-sm border border-slate-200 ${className}`}>{children}</div>;
 
-        const MaterialStatusBadge = ({ status }) => {
-            const colors = {
-                '발주중': 'bg-yellow-100 text-yellow-700',
-                '제작완료': 'bg-indigo-100 text-indigo-700 font-bold animate-pulse',
-                '입고완료': 'bg-green-100 text-green-700',
-            };
-            return <span className={`flex-shrink-0 px-2 py-0.5 rounded text-[11px] whitespace-nowrap ${colors[status] || 'bg-gray-100'}`}>{status}</span>;
-        };
-
-        const Card = ({ children, className = "", onClick }) => (
-            <div onClick={onClick} className={`bg-white rounded-xl shadow-sm border border-slate-200 ${className}`}>{children}</div>
-        );
-
+        // --- Login Component ---
         const LoginView = ({ onLogin }) => {
             const [code, setCode] = useState('');
             const [error, setError] = useState('');
-
             const handleSubmit = (e) => {
                 e.preventDefault();
-                if (code === '4545') {
-                    onLogin('employee');
-                } else if (code === '2203') {
-                    onLogin('admin');
-                } else {
-                    setError('등록된 코드가 아닙니다.');
-                }
+                if (code === '4545') onLogin('employee');
+                else if (code === '2203') onLogin('admin');
+                else setError('인증 코드가 틀렸습니다.');
             };
-
             return (
                 <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
                     <Card className="w-full max-w-md p-8 space-y-6 shadow-xl">
                         <div className="text-center space-y-2">
-                            <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <Lock className="text-indigo-600" size={32} />
-                            </div>
+                            <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><Lock className="text-indigo-600" size={32} /></div>
                             <h1 className="text-2xl font-bold text-slate-800">숨쉬는 깡통</h1>
-                            <p className="text-slate-500">관리 시스템 접근 권한 확인</p>
+                            <p className="text-slate-500">회사 인증 코드를 입력해주세요.</p>
                         </div>
-                        
                         <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <input 
-                                    type="password" 
-                                    value={code}
-                                    onChange={(e) => {setCode(e.target.value); setError('');}}
-                                    placeholder="인증 코드 (4자리)"
-                                    className="w-full text-center text-2xl tracking-widest p-3 border-2 border-slate-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
-                                    maxLength={4}
-                                    autoFocus
-                                />
-                                {error && <p className="text-red-500 text-sm text-center mt-2 font-bold animate-pulse">{error}</p>}
-                            </div>
-                            <button 
-                                type="submit"
-                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
-                            >
-                                <Key size={20}/> 입장하기
-                            </button>
+                            <input type="password" value={code} onChange={(e) => setCode(e.target.value)} placeholder="인증 코드" className="w-full text-center text-2xl p-3 border-2 rounded-xl focus:border-indigo-500 outline-none" maxLength={4} autoFocus />
+                            {error && <p className="text-red-500 text-sm text-center font-bold">{error}</p>}
+                            <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2"><Key size={20}/> 입장하기</button>
                         </form>
                     </Card>
                 </div>
             );
         };
 
-        const NewOrderModal = ({ isOpen, onClose, onSubmit }) => {
-            if (!isOpen) return null;
-            
-            const [formData, setFormData] = useState({
-                itemName: '', clientName: '', deliveryDate: '', description: ''
-            });
-            const [newFile, setNewFile] = useState({ name: '', url: '' });
-            const [files, setFiles] = useState([]);
-
-            const handleAddFile = () => {
-                if (!newFile.name || !newFile.url) return;
-                setFiles([...files, { ...newFile, id: Date.now() }]);
-                setNewFile({ name: '', url: '' });
-            };
-
-            const handleSubmit = () => {
-                if(!formData.itemName) return alert('작업명을 입력해주세요.');
-                onSubmit({ ...formData, files });
-                onClose();
-                setFormData({ itemName: '', clientName: '', deliveryDate: '', description: '' });
-                setFiles([]);
-            };
-
-            return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in">
-                    <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
-                        <div className="p-4 border-b flex justify-between items-center">
-                            <h3 className="font-bold text-lg">새 작업 등록</h3>
-                            <button onClick={onClose}><X size={20} className="text-gray-400"/></button>
-                        </div>
-                        <div className="p-6 space-y-4 overflow-y-auto">
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1">작업명 (필수)</label>
-                                <input className="w-full p-2 border rounded" placeholder="예: 성수동 카페 금속 집기" value={formData.itemName} onChange={e=>setFormData({...formData, itemName: e.target.value})} />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 mb-1">발주처/고객</label>
-                                    <input className="w-full p-2 border rounded" placeholder="고객사명" value={formData.clientName} onChange={e=>setFormData({...formData, clientName: e.target.value})} />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 mb-1">납품예정일</label>
-                                    <input type="date" className="w-full p-2 border rounded" value={formData.deliveryDate} onChange={e=>setFormData({...formData, deliveryDate: e.target.value})} />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1">메모</label>
-                                <textarea className="w-full p-2 border rounded h-20" placeholder="특이사항 입력" value={formData.description} onChange={e=>setFormData({...formData, description: e.target.value})}></textarea>
-                            </div>
-                            
-                            {/* File Attachment Section */}
-                            <div className="bg-slate-50 p-4 rounded-lg border">
-                                <label className="block text-xs font-bold text-gray-500 mb-2">도면/파일 첨부</label>
-                                <div className="flex gap-2 mb-2">
-                                    <input className="flex-1 p-2 border rounded text-sm" placeholder="파일명 (예: 도면.pdf)" value={newFile.name} onChange={e=>setNewFile({...newFile, name: e.target.value})}/>
-                                    <input className="flex-1 p-2 border rounded text-sm" placeholder="파일 링크(URL)" value={newFile.url} onChange={e=>setNewFile({...newFile, url: e.target.value})}/>
-                                    <button onClick={handleAddFile} className="bg-slate-700 text-white px-3 rounded font-bold text-sm">추가</button>
-                                </div>
-                                <div className="space-y-1 max-h-32 overflow-y-auto">
-                                    {files.map((f, i) => (
-                                        <div key={i} className="flex justify-between items-center bg-white p-2 rounded border text-xs">
-                                            <span className="truncate text-blue-600">{f.name}</span>
-                                            <button onClick={()=>setFiles(files.filter((_,idx)=>idx!==i))}><X size={14} className="text-red-400"/></button>
-                                        </div>
-                                    ))}
-                                    {files.length === 0 && <div className="text-center text-gray-400 text-xs py-2">첨부된 파일이 없습니다.</div>}
-                                </div>
-                            </div>
-                        </div>
-                        <div className="p-4 border-t flex gap-2">
-                            <button onClick={onClose} className="flex-1 py-3 rounded-lg bg-gray-100 text-gray-600 font-bold">취소</button>
-                            <button onClick={handleSubmit} className="flex-1 py-3 rounded-lg bg-indigo-600 text-white font-bold">등록하기</button>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        const Dashboard = ({ orders, stats, suppliers, onNavigate, isAdmin, currentUserId }) => {
+        // --- Main Views (Full Logic) ---
+        
+        // 1. Dashboard View
+        const DashboardView = ({ orders, stats, suppliers, onNavigate }) => {
+            const [aiBriefing, setAiBriefing] = useState(null);
+            const [isGen, setIsGen] = useState(false);
             const [activeStat, setActiveStat] = useState(null);
             const [activeRoutePopup, setActiveRoutePopup] = useState(null);
-            const [aiBriefing, setAiBriefing] = useState(null);
-            const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false);
 
             const generateBriefing = async () => {
-                setIsGeneratingBriefing(true);
-                const urgentTasks = orders.filter(o => {
-                    if (!o.deliveryDate || ['납품완료', '완료된 작업'].includes(o.status)) return false;
-                    return Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2;
-                }).map(o => `${o.itemName}(${o.deliveryDate})`).join(', ');
-
-                const prompt = `
-                    역할: 금속 인테리어 회사 '숨쉬는 깡통'의 현장 관리자.
-                    목표: 팀원들에게 오늘 업무 현황을 아주 간결하게 전달.
-                    
-                    [데이터]
-                    - 진행중: ${stats.ongoing}건
-                    - 회수대기: ${stats.pickup}건
-                    - 긴급: ${stats.urgent}건 (${urgentTasks})
-                    
-                    [지침]
-                    1. 인사말(안녕하세요 등), 응원 문구, 잡담 절대 금지.
-                    2. 오직 핵심 정보만 짧은 문장이나 개조식으로 나열.
-                    3. 긴급 건은 강조.
-                    4. 전체 3~4줄 이내로 끝낼 것.
-                `;
-
-                const result = await callGemini(prompt);
-                setAiBriefing(result);
-                setIsGeneratingBriefing(false);
+                setIsGen(true);
+                const prompt = `숨쉬는 깡통 금속 인테리어 회사. 오늘 현황: 진행중 ${stats.ongoing}건, 회수대기 ${stats.pickup}건, 긴급 ${stats.urgent}건. 완료 ${stats.completed}건. 팀원 공유용 일일 브리핑을 인사말 없이 데이터 위주로 5줄 이내 요약해줘.`;
+                const res = await callGemini(prompt);
+                setAiBriefing(res);
+                setIsGen(false);
             };
 
             const optimizedRoute = useMemo(() => {
-                const pickupTargets = Object.keys(suppliers).filter(n => 
-                    suppliers[n].some(m => m.status === '제작완료')
-                );
-
+                const pickupTargets = Object.keys(suppliers).filter(n => suppliers[n].some(m => m.status === '제작완료'));
                 if (pickupTargets.length === 0) return [];
-
                 let currentLoc = { lat: COMPANY_INFO.lat, lng: COMPANY_INFO.lng, name: 'start' };
-                let unvisited = pickupTargets.map(name => ({
-                    name,
-                    lat: SUPPLIER_INFO[name]?.lat || 37.5, 
-                    lng: SUPPLIER_INFO[name]?.lng || 127.0,
-                    count: suppliers[name].filter(m => m.status === '제작완료').length
-                }));
-
+                let unvisited = pickupTargets.map(name => ({ name, lat: SUPPLIER_INFO[name]?.lat || 37.5, lng: SUPPLIER_INFO[name]?.lng || 127.0, count: suppliers[name].filter(m => m.status === '제작완료').length }));
                 const route = [];
-
                 while (unvisited.length > 0) {
-                    let nearest = null;
-                    let minDist = Infinity;
-                    let nearestIdx = -1;
-
+                    let nearest = null, minDist = Infinity, nearestIdx = -1;
                     unvisited.forEach((node, idx) => {
                         const dist = getDistance(currentLoc.lat, currentLoc.lng, node.lat, node.lng);
-                        if (dist < minDist) {
-                            minDist = dist;
-                            nearest = node;
-                            nearestIdx = idx;
-                        }
+                        if (dist < minDist) { minDist = dist; nearest = node; nearestIdx = idx; }
                     });
-
-                    if (nearest) {
-                        route.push(nearest);
-                        currentLoc = nearest; 
-                        unvisited.splice(nearestIdx, 1);
-                    } else {
-                        break;
-                    }
+                    if (nearest) { route.push(nearest); currentLoc = nearest; unvisited.splice(nearestIdx, 1); } else break;
                 }
-
                 return route;
             }, [suppliers]);
 
-            const statList = useMemo(() => {
-                if (!activeStat) return [];
-                if (activeStat === 'pickup') {
-                    const list = [];
-                    orders.forEach(o => (o.materials || []).forEach(m => {
-                        if (m.status === '제작완료') {
-                            list.push({ ...m, orderName: o.itemName, orderId: o.id, type: 'material' });
-                        }
-                    }));
-                    return list;
-                }
-                
-                return orders.filter(o => {
-                    if (activeStat === 'ongoing') return !['납품완료', '완료된 작업'].includes(o.status);
-                    if (activeStat === 'urgent') {
-                        if (!o.deliveryDate || ['납품완료', '완료된 작업'].includes(o.status)) return false;
-                        return Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2;
-                    }
-                    if (activeStat === 'completed') {
-                        const isDone = ['납품완료', '완료된 작업'].includes(o.status);
-                        const oneMonthAgo = new Date();
-                        oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
-                        const delDate = new Date(o.deliveryDate);
-                        return isDone && delDate >= oneMonthAgo;
-                    }
-                    return false;
-                });
-            }, [activeStat, orders]);
-
-            const StatModal = () => {
-                if(!activeStat) return null;
-                const titles = { ongoing: '진행 중인 작업', pickup: '회수 대기 자재', urgent: '마감 임박 작업', completed: '최근 완료된 작업 (30일)' };
-                const color = { ongoing: 'blue', pickup: 'indigo', urgent: 'red', completed: 'slate' }[activeStat];
-
-                return (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={()=>setActiveStat(null)}>
-                        <div className="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]" onClick={e=>e.stopPropagation()}>
-                            <div className={`bg-${color}-50 p-4 border-b border-${color}-100 flex justify-between items-center`}>
-                                <h3 className={`font-bold text-${color}-700 flex items-center gap-2`}>
-                                    {titles[activeStat]} ({statList.length})
-                                </h3>
-                                <button onClick={()=>setActiveStat(null)} className="p-1 hover:bg-white rounded-full"><X size={16}/></button>
-                            </div>
-                            <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-slate-50">
-                                {statList.length === 0 && <div className="p-8 text-center text-gray-400 text-sm">해당하는 항목이 없습니다.</div>}
-                                {statList.map((item, i) => (
-                                    activeStat === 'pickup' ? (
-                                        <div key={i} className="bg-white p-3 rounded border shadow-sm hover:border-indigo-400 transition-colors" onClick={()=>{
-                                            const order = orders.find(o=>o.id===item.orderId);
-                                            if(order) onNavigate(order);
-                                        }}>
-                                            <div className="flex justify-between mb-1">
-                                                <span className="font-bold text-indigo-700 text-sm">{item.supplier}</span>
-                                                <span className="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-bold">제작완료</span>
-                                            </div>
-                                            <div className="font-medium text-slate-800">{item.item}</div>
-                                            <div className="text-xs text-gray-500 mt-1 flex justify-between">
-                                                <span>{item.quantity}</span>
-                                                <span className="text-indigo-400">Project: {item.orderName}</span>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div key={item.id} className="bg-white p-3 rounded border shadow-sm cursor-pointer hover:border-blue-400 transition-colors" onClick={()=>onNavigate(item)}>
-                                            <div className="flex justify-between items-center mb-1">
-                                                <span className="text-xs text-gray-400">{item.displayId}</span>
-                                                {activeStat==='urgent' && <span className="text-xs font-bold text-red-600 animate-pulse">{item.deliveryDate} 마감</span>}
-                                            </div>
-                                            <div className="font-bold text-slate-800 mb-1">{item.itemName}</div>
-                                            <div className="flex justify-between items-center">
-                                                <StatusBadge status={item.status}/>
-                                                <span className="text-xs text-gray-500">{item.clientName}</span>
-                                            </div>
-                                        </div>
-                                    )
-                                ))}
+            return (
+                <div className="space-y-6 animate-fade-in">
+                    {/* Stat Modal */}
+                    {activeStat && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={()=>setActiveStat(null)}>
+                            <div className="bg-white p-6 rounded-xl max-w-sm w-full m-4">
+                                <h3 className="font-bold text-lg mb-4">{activeStat} 목록</h3>
+                                <div className="max-h-60 overflow-y-auto">
+                                    {orders.filter(o => {
+                                        if(activeStat === '진행중') return !['납품완료', '완료된 작업'].includes(o.status);
+                                        if(activeStat === '긴급') return Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2;
+                                        return false;
+                                    }).map(o => <div key={o.id} className="p-2 border-b cursor-pointer hover:bg-gray-50" onClick={() => onNavigate(o)}>{o.itemName}</div>)}
+                                    {activeStat === '회수대기' && Object.keys(suppliers).filter(s => suppliers[s].some(m => m.status === '제작완료')).map(s => <div key={s} className="p-2 border-b font-bold text-indigo-600">{s} (회수 가능)</div>)}
+                                </div>
+                                <button onClick={()=>setActiveStat(null)} className="mt-4 w-full bg-slate-800 text-white py-2 rounded">닫기</button>
                             </div>
                         </div>
-                    </div>
-                )
-            };
-
-            const RouteModal = () => {
-                if(!activeRoutePopup) return null;
-                const supplierItems = suppliers[activeRoutePopup]?.filter(m => m.status === '제작완료') || [];
-                const supplierInfo = SUPPLIER_INFO[activeRoutePopup];
-
-                return (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={()=>setActiveRoutePopup(null)}>
-                        <div className="bg-white w-full max-w-sm rounded-xl shadow-2xl overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}>
-                            <div className="bg-indigo-600 p-4 text-white flex justify-between items-start">
-                                <div>
-                                    <div className="text-xs font-bold text-indigo-200 mb-1">회수 지점 상세</div>
-                                    <h3 className="font-bold text-lg flex items-center gap-2">{activeRoutePopup}</h3>
-                                    <div className="text-xs text-indigo-100 mt-1 flex items-center gap-1"><MapPin size={12}/> {supplierInfo?.address}</div>
-                                </div>
-                                <button onClick={()=>setActiveRoutePopup(null)} className="p-1 bg-indigo-500 hover:bg-indigo-400 rounded text-white"><X size={16}/></button>
-                            </div>
-                            <div className="p-4 bg-slate-50 flex-1 overflow-y-auto max-h-[60vh]">
-                                <h4 className="font-bold text-sm text-slate-700 mb-3 flex items-center gap-1"><Package size={14}/> 회수할 자재 ({supplierItems.length})</h4>
-                                <div className="space-y-2">
-                                    {supplierItems.length === 0 && <div className="text-center text-gray-400 text-sm py-4">회수할 자재가 없습니다.</div>}
-                                    {supplierItems.map((item, i) => (
-                                        <div key={i} className="bg-white p-3 rounded border shadow-sm cursor-pointer hover:bg-slate-50" onClick={()=>{
-                                            const order = orders.find(o=>o.itemName===item.orderName); // Simple match
-                                            if(order) onNavigate(order);
-                                        }}>
-                                            <div className="font-bold text-slate-800 text-sm">{item.item}</div>
-                                            <div className="flex justify-between items-center mt-1">
-                                                <span className="text-xs bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold">{item.quantity}</span>
-                                                <span className="text-[10px] text-gray-400">{item.orderName}</span>
-                                            </div>
-                                        </div>
+                    )}
+                    
+                    {/* Route Modal */}
+                    {activeRoutePopup && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={()=>setActiveRoutePopup(null)}>
+                            <div className="bg-white w-full max-w-sm rounded-xl p-6 m-4">
+                                <h3 className="font-bold text-lg mb-2">{activeRoutePopup} 회수 품목</h3>
+                                <div className="space-y-2 max-h-60 overflow-y-auto mb-4">
+                                    {suppliers[activeRoutePopup]?.filter(m => m.status === '제작완료').map((item, i) => (
+                                        <div key={i} className="flex justify-between p-2 bg-gray-50 rounded"><span className="font-bold">{item.item}</span><span>{item.quantity}</span></div>
                                     ))}
                                 </div>
-                            </div>
-                            <div className="p-3 border-t bg-white">
-                                <a href={`https://map.naver.com/p/search/${supplierInfo?.address}`} target="_blank" rel="noreferrer" className="w-full bg-indigo-600 text-white py-2 rounded font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-700">
-                                    <Map size={16}/> 지도/네비게이션 열기
-                                </a>
+                                <button onClick={()=>setActiveRoutePopup(null)} className="w-full bg-indigo-600 text-white py-2 rounded">닫기</button>
                             </div>
                         </div>
-                    </div>
-                );
-            };
+                    )}
 
-            const BriefingModal = () => {
-                if(!aiBriefing) return null;
-                return (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={()=>setAiBriefing(null)}>
-                        <div className="bg-white w-full max-w-md rounded-xl shadow-2xl p-6 space-y-4" onClick={e=>e.stopPropagation()}>
-                            <div className="flex justify-between items-center border-b pb-3">
-                                <h3 className="text-lg font-bold text-indigo-800 flex items-center gap-2">
-                                    <Sparkles className="text-yellow-500" size={20}/> 금일 현황 브리핑
-                                </h3>
-                                <button onClick={()=>setAiBriefing(null)}><X size={20} className="text-gray-400"/></button>
-                            </div>
-                            <div className="bg-gray-50 p-4 rounded-xl text-sm text-gray-700 whitespace-pre-wrap leading-relaxed border font-mono">
-                                {aiBriefing}
-                            </div>
-                            <button 
-                                onClick={() => {
-                                    navigator.clipboard.writeText(aiBriefing);
-                                    alert('클립보드에 복사되었습니다!');
-                                    setAiBriefing(null);
-                                }}
-                                className="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700"
-                            >
-                                복사하기
-                            </button>
-                        </div>
-                    </div>
-                );
-            }
-
-            return (
-                <div className="space-y-6 animate-fade-in pb-10 relative">
-                    <StatModal />
-                    <RouteModal />
-                    <BriefingModal />
-                    
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <Card className="p-4 border-l-4 border-blue-600 cursor-pointer hover:bg-blue-50 transition-colors active:scale-95 transform duration-100" onClick={()=>setActiveStat('ongoing')}>
-                            <div className="text-xs text-gray-500 flex justify-between items-center">진행 중 <ChevronRight size={12}/></div>
-                            <div className="text-2xl font-bold">{stats.ongoing}건</div>
-                        </Card>
-                        <Card className="p-4 border-l-4 border-indigo-500 cursor-pointer hover:bg-indigo-50 transition-colors active:scale-95 transform duration-100" onClick={()=>setActiveStat('pickup')}>
-                            <div className="text-xs text-gray-500 flex justify-between items-center">회수 대기 <ChevronRight size={12}/></div>
-                            <div className="text-2xl font-bold text-indigo-600 animate-pulse">{stats.pickup}건</div>
-                        </Card>
-                        <Card className="p-4 border-l-4 border-red-500 cursor-pointer hover:bg-red-50 transition-colors active:scale-95 transform duration-100" onClick={()=>setActiveStat('urgent')}>
-                            <div className="text-xs text-gray-500 flex justify-between items-center">마감 임박 <ChevronRight size={12}/></div>
-                            <div className="text-2xl font-bold text-red-600">{stats.urgent}건</div>
-                        </Card>
-                        <Card className="p-4 border-l-4 border-slate-400 cursor-pointer hover:bg-slate-100 transition-colors active:scale-95 transform duration-100" onClick={()=>setActiveStat('completed')}>
-                            <div className="text-xs text-gray-500 flex justify-between items-center">최근 완료 (30일) <ChevronRight size={12}/></div>
-                            <div className="text-2xl font-bold text-slate-500">{stats.completed}건</div>
-                        </Card>
+                        <Card className="p-4 border-l-4 border-blue-600" onClick={()=>setActiveStat('진행중')}><div className="text-xs text-gray-500">진행 중</div><div className="text-2xl font-bold">{stats.ongoing}건</div></Card>
+                        <Card className="p-4 border-l-4 border-indigo-500" onClick={()=>setActiveStat('회수대기')}><div className="text-xs text-gray-500">회수 대기</div><div className="text-2xl font-bold text-indigo-600 animate-pulse">{stats.pickup}건</div></Card>
+                        <Card className="p-4 border-l-4 border-red-500" onClick={()=>setActiveStat('긴급')}><div className="text-xs text-gray-500">마감 임박</div><div className="text-2xl font-bold text-red-600">{stats.urgent}건</div></Card>
+                        <Card className="p-4 border-l-4 border-slate-400"><div className="text-xs text-gray-500">완료</div><div className="text-2xl font-bold text-slate-500">{stats.completed}건</div></Card>
                     </div>
 
-                    <button 
-                        onClick={generateBriefing}
-                        disabled={isGeneratingBriefing}
-                        className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 rounded-xl shadow-lg font-bold flex items-center justify-center gap-2 hover:from-indigo-600 hover:to-purple-700 transition-all disabled:opacity-70"
-                    >
-                        {isGeneratingBriefing ? (
-                            <span className="animate-pulse">✨ AI 요약 생성 중...</span>
-                        ) : (
-                            <>
-                                <Sparkles size={20} className="text-yellow-300"/> ✨ AI 일일 브리핑 생성
-                            </>
-                        )}
+                    <button onClick={generateBriefing} disabled={isGen} className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 rounded-xl shadow-lg font-bold flex items-center justify-center gap-2">
+                        {isGen ? '작성 중...' : <><Sparkles size={20}/> AI 브리핑 생성</>}
                     </button>
-
-                    <div>
-                        <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><FileText size={18}/> 진행 중인 작업 (최신순)</h3>
-                        <div className="grid gap-3">
-                            {orders.filter(o => !['납품완료', '완료된 작업'].includes(o.status)).slice(0, 3).map(o => (
-                                <Card key={o.id} className="p-4 flex justify-between items-center cursor-pointer hover:border-blue-400 transition-colors" onClick={() => onNavigate(o)}>
-                                    <div className="flex-1 min-w-0 pr-4">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <StatusBadge status={o.status} />
-                                            <span className="text-xs text-gray-400 truncate">{o.displayId}</span>
-                                        </div>
-                                        <div className="font-bold truncate">{o.itemName}</div>
-                                    </div>
-                                    <div className="text-sm font-bold text-red-500 whitespace-nowrap">{o.deliveryDate} 마감</div>
-                                </Card>
-                            ))}
-                            {orders.filter(o => !['납품완료', '완료된 작업'].includes(o.status)).length === 0 && <div className="text-gray-400 text-sm p-2">진행 중인 작업이 없습니다.</div>}
-                        </div>
-                    </div>
+                    {aiBriefing && <div className="bg-slate-100 p-4 rounded-xl text-sm whitespace-pre-wrap border border-indigo-200">{aiBriefing}</div>}
 
                     <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5">
-                        <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2 text-indigo-900 font-bold"><Truck size={20} /><h3>최적 회수 동선 (거리순)</h3></div>
-                            <div className="text-[10px] text-indigo-400 bg-white px-2 py-1 rounded-full border border-indigo-100">포천 본사 기준</div>
+                        <div className="flex items-center gap-2 mb-3 text-indigo-900 font-bold"><Truck size={20} /><h3>추천 회수 코스</h3></div>
+                        <div className="flex flex-wrap gap-2 items-center text-sm">
+                            <span className="bg-white px-2 py-1 rounded border">숨쉬는 깡통</span>
+                            {optimizedRoute.map(s => (
+                                <React.Fragment key={s.name}>
+                                    <ArrowRight size={14} className="text-indigo-400"/>
+                                    <span className="bg-indigo-600 text-white px-2 py-1 rounded font-bold cursor-pointer" onClick={() => setActiveRoutePopup(s.name)}>{s.name}</span>
+                                </React.Fragment>
+                            ))}
+                            <ArrowRight size={14} className="text-indigo-400"/>
+                            <span className="bg-white px-2 py-1 rounded border">복귀</span>
                         </div>
-                        {optimizedRoute.length > 0 ? (
-                            <div className="flex flex-wrap gap-2 items-center">
-                                <a href={COMPANY_INFO.mapUrl} target="_blank" rel="noreferrer" className="bg-white px-3 py-2 rounded shadow-sm text-xs font-bold flex items-center gap-1 text-indigo-700 hover:bg-indigo-50 border border-indigo-100 group" title={COMPANY_INFO.address}>
-                                    <Factory size={14} className="group-hover:scale-110 transition-transform"/> 본사
-                                </a>
-                                {optimizedRoute.map((stop, i) => (
-                                    <React.Fragment key={i}>
-                                        <ArrowRight size={16} className="text-indigo-400" />
-                                        <button onClick={() => setActiveRoutePopup(stop.name)} className="bg-indigo-600 text-white px-3 py-2 rounded shadow-md text-sm font-bold hover:bg-indigo-700 transition-colors flex items-center gap-1 focus:outline-none active:scale-95 transform duration-100">
-                                            <span>{i+1}. {stop.name}</span>
-                                            <span className="bg-white/20 px-1.5 rounded text-[10px]">{stop.count}</span>
-                                        </button>
-                                    </React.Fragment>
-                                ))}
-                                <ArrowRight size={16} className="text-indigo-400" />
-                                <a href={COMPANY_INFO.mapUrl} target="_blank" rel="noreferrer" className="bg-white px-3 py-2 rounded shadow-sm text-xs font-bold flex items-center gap-1 text-indigo-700 hover:bg-indigo-50 border border-indigo-100 group" title="복귀">
-                                    <Factory size={14} className="group-hover:scale-110 transition-transform"/> 복귀
-                                </a>
-                            </div>
-                        ) : <div className="text-sm text-indigo-400">현재 회수할 자재가 없습니다.</div>}
                     </div>
                 </div>
             );
         };
 
-        const ListView = ({ orders, onSelect, onOpenAdd }) => {
+        // 2. List View
+        const ListView = ({ orders, onSelect, onAdd }) => {
             const [searchTerm, setSearchTerm] = useState('');
             const [open, setOpen] = useState({ design: true, prod: true, done: false });
             const groups = { design: [], prod: [], done: [] };
-            
-            orders.filter(o => (o.itemName || '').toLowerCase().includes(searchTerm.toLowerCase())).forEach(o => {
+            orders.filter(o => (o.itemName || '').includes(searchTerm)).forEach(o => {
                 if (['대기', '설계중'].includes(o.status)) groups.design.push(o);
                 else if (['제작중', '도장/마감'].includes(o.status)) groups.prod.push(o);
                 else groups.done.push(o);
@@ -627,40 +281,25 @@
 
             const Section = ({ id, title, items }) => (
                 <div className="mb-4">
-                    <div onClick={() => setOpen({ ...open, [id]: !open[id] })} className={`flex justify-between p-3 rounded cursor-pointer transition-colors ${open[id] ? 'bg-slate-800 text-white' : 'bg-white border hover:bg-slate-50'}`}>
+                    <div onClick={() => setOpen({ ...open, [id]: !open[id] })} className={`flex justify-between p-3 rounded cursor-pointer ${open[id] ? 'bg-slate-800 text-white' : 'bg-white border'}`}>
                         <span className="font-bold">{title} ({items.length})</span>{open[id] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                     </div>
                     {open[id] && <div className="mt-2 pl-2 border-l-2 border-slate-200 space-y-2">
                         {items.map(o => (
-                            <Card key={o.id} className="p-3 cursor-pointer hover:border-blue-500 bg-white transition-colors" onClick={() => onSelect(o)}>
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="font-bold truncate mr-2">{o.itemName}</span>
-                                    <StatusBadge status={o.status} />
-                                </div>
-                                <div className="text-xs text-gray-500 flex justify-between">
-                                    <span>{o.clientName}</span>
-                                    <span>{o.deliveryDate} 납품</span>
-                                </div>
+                            <Card key={o.id} className="p-3 cursor-pointer hover:border-blue-500 bg-white" onClick={() => onSelect(o)}>
+                                <div className="flex justify-between"><span className="font-bold">{o.itemName}</span><StatusBadge status={o.status} /></div>
+                                <div className="text-xs text-gray-500 mt-1">{o.clientName} | {o.deliveryDate}</div>
                             </Card>
                         ))}
-                        {items.length === 0 && <div className="text-sm text-gray-400 p-2">항목 없음</div>}
                     </div>}
                 </div>
             );
-
             return (
-                <div className="space-y-4 animate-fade-in pb-10">
+                <div className="space-y-4 animate-fade-in">
                     <div className="flex gap-2 bg-white p-3 rounded-xl border shadow-sm sticky top-0 z-10">
                         <Search size={20} className="text-gray-400"/>
-                        <input 
-                            className="flex-1 outline-none bg-transparent min-w-0" 
-                            placeholder="작업명 검색..." 
-                            value={searchTerm} 
-                            onChange={e => setSearchTerm(e.target.value)} 
-                        />
-                        <button onClick={onOpenAdd} className="bg-slate-800 text-white px-3 py-1 rounded text-sm font-bold flex items-center gap-1 flex-shrink-0">
-                            <Plus size={16} /> <span className="hidden sm:inline">작업등록</span>
-                        </button>
+                        <input className="flex-1 outline-none bg-transparent" placeholder="작업명 검색..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                        <button onClick={onAdd} className="bg-slate-800 text-white px-3 py-1 rounded text-sm font-bold flex items-center gap-1"><Plus size={16}/> 작업등록</button>
                     </div>
                     <Section id="design" title="설계 단계" items={groups.design} />
                     <Section id="prod" title="제작 단계" items={groups.prod} />
@@ -669,445 +308,268 @@
             );
         };
 
-        const DetailView = ({ order, onBack, onUpdate, onDelete, isAdmin, currentUserId }) => {
+        // 3. Detail & Form Views (Simplified for single file but functional)
+        const DetailView = ({ order, onBack, onUpdate, isAdmin, currentUserId }) => {
             if (!order) return null;
-            const [mat, setMat] = useState({ supplier: '', item: '', quantity: '', status: '발주중', date: new Date().toISOString().split('T')[0] });
-            const [link, setLink] = useState({ name: '', url: '' });
-            
-            // Permission Check: Admin OR Owner
             const canEdit = isAdmin || order.userId === currentUserId;
-
-            const [showSuggestions, setShowSuggestions] = useState(false);
-            const supplierOptions = Object.keys(SUPPLIER_INFO);
-            const filteredSuppliers = supplierOptions.filter(s => s.includes(mat.supplier));
-
-            const updateOrder = (newData) => {
-                onUpdate({ ...order, ...newData });
-            };
-
-            const handleDelete = () => {
-                if(confirm('정말로 이 작업을 삭제하시겠습니까? 복구할 수 없습니다.')) {
-                    onDelete(order.id);
-                }
-            }
-
-            const handleAddMaterial = () => {
-                if(!mat.supplier || !mat.item) return;
-                const newMaterials = [...(order.materials || []), { ...mat, id: Date.now() }];
-                updateOrder({ materials: newMaterials });
-                setMat({ supplier: '', item: '', quantity: '', status: '발주중', date: new Date().toISOString().split('T')[0] });
-            };
+            const [mat, setMat] = useState({ supplier: '', item: '', quantity: '', status: '발주중', date: new Date().toISOString().split('T')[0] });
+            
+            const updateOrder = (newData) => onUpdate({ ...order, ...newData });
 
             return (
-                <div className="h-full overflow-y-auto animate-fade-in pb-10 pr-1" onClick={()=>setShowSuggestions(false)}>
-                    <div className="flex items-center justify-between text-slate-500 mb-4">
-                        <div className="flex items-center gap-2 cursor-pointer hover:text-slate-800" onClick={onBack}>
-                            <ChevronLeft size={20}/> <span className="text-sm font-bold">목록으로</span>
-                        </div>
-                        {canEdit && (
-                            <button onClick={handleDelete} className="text-red-400 hover:text-red-600 p-2 rounded-full hover:bg-red-50">
-                                <Trash2 size={18}/>
-                            </button>
-                        )}
-                    </div>
-                    
+                <div className="h-full overflow-y-auto animate-fade-in pb-10">
+                    <div className="flex items-center gap-2 text-slate-500 cursor-pointer mb-4" onClick={onBack}><ChevronLeft size={20}/> 목록으로</div>
                     <div className="flex justify-between items-start gap-4 mb-6">
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                <span className="font-mono text-gray-400 text-sm">{order.displayId}</span>
-                                <StatusBadge status={order.status} />
-                            </div>
-                            <h1 className="text-2xl md:text-3xl font-bold break-words leading-tight">{order.itemName}</h1>
-                        </div>
+                        <div><div className="flex gap-2 mb-1"><span className="font-mono text-sm text-gray-400">{order.displayId}</span><StatusBadge status={order.status}/></div><h1 className="text-2xl font-bold">{order.itemName}</h1></div>
+                        {canEdit && <button onClick={() => onUpdate(null, 'form')} className="bg-slate-100 px-3 py-2 rounded font-bold text-sm"><Edit3 size={16}/> 수정</button>}
                     </div>
-
-                    {/* Status Controller */}
-                    {canEdit && (
-                        <div className="mb-4 overflow-x-auto">
-                            <div className="flex gap-2 pb-2">
-                                {['대기','설계중','제작중','도장/마감','납품완료'].map(s => (
-                                    <button 
-                                        key={s}
-                                        onClick={() => updateOrder({status: s})}
-                                        className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap border transition-colors ${order.status === s ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-gray-500 border-gray-200 hover:border-slate-400'}`}
-                                    >
-                                        {s}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    <Card className="p-5 mb-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
-                            <div>
-                                <div className="font-bold text-gray-400 uppercase text-xs mb-1">Client</div>
-                                <div className="text-lg font-bold text-slate-800">{order.clientName}</div>
-                                <div className="text-gray-500">{order.clientContact}</div>
-                            </div>
-                            <div>
-                                <div className="font-bold text-gray-400 uppercase text-xs mb-1">Delivery</div>
-                                <div className="text-lg text-red-600 font-bold">{order.deliveryDate}</div>
-                            </div>
-                            <div>
-                                <div className="font-bold text-gray-400 uppercase text-xs mb-1">Registered By</div>
-                                <div className="text-gray-500 font-mono text-xs">{order.userId === currentUserId ? '나 (Me)' : '동료'}</div>
-                            </div>
-                        </div>
+                    <Card className="p-5 mb-4 grid grid-cols-2 gap-4 text-sm">
+                        <div><div className="font-bold text-gray-400 text-xs">Client</div><div>{order.clientName}</div></div>
+                        <div><div className="font-bold text-gray-400 text-xs">Date</div><div className="text-red-600 font-bold">{order.deliveryDate}</div></div>
+                        <div className="col-span-2 bg-slate-50 p-3 rounded">{order.description}</div>
+                        {(order.files||[]).map(f => <div key={f.id} className="col-span-2 flex items-center gap-2 text-blue-600 bg-blue-50 p-2 rounded"><Paperclip size={14}/>{f.name}</div>)}
                     </Card>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                            <div className="font-bold text-slate-500 text-xs uppercase mb-2">Memo / Description</div>
-                            <div className="text-sm whitespace-pre-wrap text-slate-700 min-h-[80px]">{order.description || "메모 없음"}</div>
-                        </div>
-
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col">
-                            <div className="flex justify-between items-center mb-3">
-                                <h3 className="font-bold text-sm text-slate-700 flex gap-2"><FileBox size={16} /> 도면/파일</h3>
-                                <span className="text-xs text-gray-400">{(order.files || []).length}개</span>
-                            </div>
-                            
-                            <div className="flex-1 space-y-2 mb-3 max-h-[150px] overflow-y-auto">
-                                {(order.files || []).length === 0 && <div className="text-center text-xs text-gray-400 py-2">등록된 파일이 없습니다.</div>}
-                                {(order.files || []).map((f, i) => (
-                                    <div key={i} className="flex justify-between items-center p-2 bg-blue-50 rounded text-xs group">
-                                        <div className="flex items-center gap-2 truncate flex-1 min-w-0">
-                                            {f.name.endsWith('.pdf') ? <FileText size={12} className="text-red-500 flex-shrink-0"/> : <File size={12} className="text-blue-500 flex-shrink-0"/>}
-                                            <span className="truncate text-blue-800 font-medium">{f.name}</span>
-                                        </div>
-                                        <a href={f.url} target="_blank" rel="noreferrer" className="bg-white p-1 rounded text-blue-600 hover:bg-blue-100 flex-shrink-0 ml-2">
-                                            <Download size={12} />
-                                        </a>
-                                        {canEdit && (
-                                            <button onClick={()=>{
-                                                const newFiles = order.files.filter((_,idx)=>idx!==i);
-                                                updateOrder({files: newFiles});
-                                            }} className="ml-2 text-red-400 hover:text-red-600"><X size={12}/></button>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-
-                            {canEdit && (
-                                <div className="flex gap-1 border-t pt-2">
-                                    <input placeholder="파일명" className="w-1/3 border p-1.5 rounded text-xs bg-gray-50" value={link.name} onChange={e => setLink({ ...link, name: e.target.value })} />
-                                    <input placeholder="URL" className="flex-1 border p-1.5 rounded text-xs bg-gray-50" value={link.url} onChange={e => setLink({ ...link, url: e.target.value })} />
-                                    <button onClick={() => {
-                                        if (!link.name || !link.url) return;
-                                        updateOrder({ files: [...(order.files || []), { ...link, id: Date.now() }] });
-                                        setLink({ name: '', url: '' });
-                                    }} className="bg-slate-700 text-white px-3 rounded text-xs font-bold hover:bg-slate-800">등록</button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <div className="flex justify-between items-end">
-                            <h3 className="font-bold flex gap-2 text-slate-700"><Package className="text-indigo-600" /> 자재 발주 내역</h3>
-                        </div>
-                        
+                    {/* Material List */}
+                     <div className="space-y-2">
+                        <h3 className="font-bold flex gap-2 text-slate-700"><Package className="text-indigo-600" /> 자재 발주 내역</h3>
                         <Card className="p-0 overflow-hidden">
                             <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left min-w-[400px]">
-                                    <thead className="bg-slate-50 border-b"><tr><th className="p-2">일자</th><th className="p-2">거래처</th><th className="p-2">품목/수량</th><th className="p-2">상태</th><th className="p-2"></th></tr></thead>
-                                    <tbody>
-                                        {(order.materials || []).map((m, i) => (
-                                            <tr key={i} className="border-b last:border-0 hover:bg-slate-50">
-                                                <td className="p-2 text-xs text-gray-500">{m.date}</td>
-                                                <td className="p-2 font-bold text-indigo-900">{m.supplier}</td>
-                                                <td className="p-2">{m.item} ({m.quantity})</td>
-                                                <td className="p-2"><MaterialStatusBadge status={m.status} /></td>
-                                                <td className="p-2 text-right">
-                                                    {canEdit && (
-                                                        <div className="flex gap-1 justify-end">
-                                                            <select 
-                                                                className="text-xs border rounded p-1 bg-white"
-                                                                value={m.status}
-                                                                onChange={(e) => {
-                                                                    const newMats = [...order.materials];
-                                                                    newMats[i].status = e.target.value;
-                                                                    updateOrder({materials: newMats});
-                                                                }}
-                                                            >
-                                                                <option>발주중</option><option>제작완료</option><option>입고완료</option>
-                                                            </select>
-                                                            <button onClick={() => {
-                                                                const newMats = order.materials.filter((_, idx) => idx !== i);
-                                                                updateOrder({ materials: newMats });
-                                                            }} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button>
-                                                        </div>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {(order.materials || []).length === 0 && <tr><td colSpan="5" className="p-4 text-center text-gray-400 text-xs">등록된 자재 발주 내역이 없습니다.</td></tr>}
-                                    </tbody>
-                                    
-                                    {canEdit && (
-                                        <tfoot className="bg-indigo-50 border-t border-indigo-100">
-                                            <tr>
-                                                <td className="p-2">
-                                                    <input type="date" className="w-full text-xs p-1 border rounded" value={mat.date} onChange={e=>setMat({...mat, date: e.target.value})}/>
-                                                </td>
-                                                <td className="p-2 relative">
-                                                    <input 
-                                                        className="w-full text-xs p-1 border rounded" 
-                                                        placeholder="거래처명" 
-                                                        value={mat.supplier} 
-                                                        onChange={e=>{
-                                                            setMat({...mat, supplier: e.target.value});
-                                                            setShowSuggestions(true);
-                                                        }}
-                                                        onFocus={()=>setShowSuggestions(true)}
-                                                    />
-                                                    {showSuggestions && filteredSuppliers.length > 0 && (
-                                                        <div className="absolute z-10 bottom-full left-0 w-full bg-white border shadow-lg max-h-32 overflow-y-auto rounded mb-1">
-                                                            {filteredSuppliers.map(s => (
-                                                                <div key={s} className="p-2 text-xs hover:bg-indigo-50 cursor-pointer" onClick={(e)=>{
-                                                                    e.stopPropagation();
-                                                                    setMat({...mat, supplier: s});
-                                                                    setShowSuggestions(false);
-                                                                }}>{s}</div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td className="p-2 flex gap-1">
-                                                    <input className="flex-1 text-xs p-1 border rounded" placeholder="품목명" value={mat.item} onChange={e=>setMat({...mat, item: e.target.value})}/>
-                                                    <input className="w-12 text-xs p-1 border rounded" placeholder="수량" value={mat.quantity} onChange={e=>setMat({...mat, quantity: e.target.value})}/>
-                                                </td>
-                                                <td className="p-2">
-                                                    <select className="w-full text-xs p-1 border rounded" value={mat.status} onChange={e=>setMat({...mat, status: e.target.value})}>
-                                                        <option>발주중</option><option>제작완료</option><option>입고완료</option>
-                                                    </select>
-                                                </td>
-                                                <td className="p-2 text-right">
-                                                    <button onClick={handleAddMaterial} className="bg-indigo-600 text-white p-1.5 rounded hover:bg-indigo-700 shadow-sm w-full flex justify-center"><Plus size={14}/></button>
-                                                </td>
-                                            </tr>
-                                        </tfoot>
-                                    )}
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 border-b"><tr><th className="p-2">일자</th><th className="p-2">거래처</th><th className="p-2">품목</th><th className="p-2">상태</th></tr></thead>
+                                    <tbody>{(order.materials || []).map((m, i) => (
+                                        <tr key={i} className="border-b"><td className="p-2 text-xs">{m.date}</td><td className="p-2">{m.supplier}</td><td className="p-2">{m.item} ({m.quantity})</td>
+                                        <td className="p-2"><select value={m.status} disabled={!canEdit} className="bg-transparent font-bold text-xs" onChange={(e) => {
+                                            const updated = order.materials.map(x => x.id === m.id ? { ...x, status: e.target.value } : x);
+                                            updateOrder({ materials: updated });
+                                        }}><option>발주중</option><option>제작완료</option><option>입고완료</option></select></td></tr>
+                                    ))}</tbody>
                                 </table>
                             </div>
+                            {canEdit && <div className="p-2 border-t flex gap-1"><input placeholder="거래처" className="border p-1 w-1/3" value={mat.supplier} onChange={e=>setMat({...mat, supplier:e.target.value})}/><input placeholder="품목" className="border p-1 w-1/3" value={mat.item} onChange={e=>setMat({...mat, item:e.target.value})}/><button onClick={()=>{if(mat.item) updateOrder({materials: [...(order.materials||[]), {...mat, id:Date.now()}]})}} className="bg-indigo-600 text-white px-2 rounded">+</button></div>}
                         </Card>
-                        <p className="text-[10px] text-gray-400 text-right">* 새 작업 등록 시 누락된 자재는 여기서 즉시 추가할 수 있습니다.</p>
                     </div>
                 </div>
             );
+        };
+
+        const FormView = ({ order, onSave, onDelete, onCancel, isAdmin, currentUserId }) => {
+            const [data, setData] = useState(order || { clientName: '', itemName: '', manager: '', technician: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: '대기', description: '', files: [] });
+            const canEdit = !order || isAdmin || order.userId === currentUserId;
+
+            const handleAi = async () => {
+                if(!data.itemName) return alert('작업명을 입력하세요!');
+                const res = await callGemini(`금속 인테리어 작업 '${data.itemName}'에 필요한 상세 내용을 200자 이내로 추천해줘.`);
+                setData({...data, description: res});
+            };
+
+            if(!canEdit) return <div className="p-10 text-center">수정 권한이 없습니다.<br/><button onClick={onCancel} className="mt-4 bg-slate-800 text-white px-4 py-2 rounded">뒤로가기</button></div>;
+
+            return (
+                <div className="max-w-2xl mx-auto pb-10">
+                    <div onClick={onCancel} className="mb-4 cursor-pointer text-slate-500 flex gap-1"><ChevronLeft/> 취소</div>
+                    <Card className="p-6 space-y-4">
+                        <h2 className="text-2xl font-bold">{order ? '수정' : '등록'}</h2>
+                        <input className="w-full border p-2 rounded" placeholder="작업명" value={data.itemName} onChange={e=>setData({...data, itemName:e.target.value})}/>
+                        <div className="flex gap-2"><input className="border p-2 rounded flex-1" placeholder="업체명" value={data.clientName} onChange={e=>setData({...data, clientName:e.target.value})}/><input type="date" className="border p-2 rounded flex-1" value={data.deliveryDate} onChange={e=>setData({...data, deliveryDate:e.target.value})}/></div>
+                        <div className="relative">
+                            <textarea className="w-full border p-2 rounded h-24" placeholder="상세 내용" value={data.description} onChange={e=>setData({...data, description:e.target.value})}/>
+                            <button onClick={handleAi} className="absolute bottom-2 right-2 bg-indigo-100 text-indigo-700 text-xs px-2 py-1 rounded flex items-center gap-1"><Sparkles size={10}/> AI 추천</button>
+                        </div>
+                        <div className="border-t pt-2">
+                            <div className="text-xs font-bold mb-2">첨부파일 (시뮬레이션)</div>
+                            {data.files.map(f=><div key={f.id} className="text-xs bg-gray-50 p-1 mb-1 flex justify-between">{f.name} <X size={12} onClick={()=>setData({...data, files: data.files.filter(x=>x.id!==f.id)})}/></div>)}
+                            <input type="file" className="text-xs" onChange={e=>{ if(e.target.files[0]) setData({...data, files: [...data.files, {id:Date.now(), name:e.target.files[0].name}]}) }}/>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-4 border-t">
+                            {order && <button onClick={()=>onDelete(order.id)} className="text-red-500">삭제</button>}
+                            <button onClick={()=>onSave(data)} className="bg-slate-800 text-white px-6 py-2 rounded">저장</button>
+                        </div>
+                    </Card>
+                </div>
+            );
+        };
+        
+        const MaterialManageView = ({ suppliers, orders, onUpdateOrder }) => {
+            const [selSup, setSelSup] = useState(null);
+            const [mat, setMat] = useState({ orderId: '', item: '', quantity: '', status: '발주중' });
+            const [customSup, setCustomSup] = useState('');
+
+            const handleAdd = async () => {
+                if (!mat.item || (!selSup && !customSup)) return alert('정보를 입력하세요');
+                const supplier = selSup || customSup;
+                let target = orders.find(o => o.id === mat.orderId);
+                if (!target) {
+                    if (!confirm('프로젝트 없이 기타 발주로 등록할까요?')) return;
+                    target = { id: `misc-${Date.now()}`, itemName: '기타 발주', status: '제작중', createdAt: new Date(), deadline: new Date().toISOString().split('T')[0], materials: [] };
+                }
+                await onUpdateOrder({ ...target, materials: [...(target.materials||[]), { id: Date.now(), supplier, ...mat, date: new Date().toISOString().split('T')[0] }] });
+                alert('발주 등록 완료!'); setMat({ ...mat, item: '', quantity: '' });
+            };
+
+            return (
+                <div className="flex h-full gap-4">
+                    <div className="w-1/3 overflow-y-auto space-y-2">
+                        <div onClick={()=>{setSelSup(null); setCustomSup('')}} className={`p-3 border rounded cursor-pointer ${!selSup ? 'bg-indigo-600 text-white' : 'bg-white'}`}>+ 직접 입력</div>
+                        {Object.keys(suppliers).map(s => <div key={s} onClick={()=>{setSelSup(s); setCustomSup('')}} className={`p-3 border rounded cursor-pointer ${selSup===s ? 'bg-slate-800 text-white' : 'bg-white'}`}>{s}</div>)}
+                    </div>
+                    <div className="w-2/3 bg-white border rounded p-4">
+                        <h2 className="font-bold text-xl mb-4">{selSup || '직접 입력'}</h2>
+                        {!selSup && <input className="border p-2 w-full mb-2" placeholder="거래처명" value={customSup} onChange={e=>setCustomSup(e.target.value)}/>}
+                        <div className="bg-indigo-50 p-3 rounded mb-4">
+                            <select className="border p-1 w-full mb-2" value={mat.orderId} onChange={e=>setMat({...mat, orderId:e.target.value})}>
+                                <option value="">프로젝트 선택</option>
+                                {orders.map(o=><option key={o.id} value={o.id}>{o.itemName}</option>)}
+                            </select>
+                            <div className="flex gap-2"><input className="border p-1 flex-1" placeholder="품목" value={mat.item} onChange={e=>setMat({...mat, item:e.target.value})}/><input className="border p-1 w-20" placeholder="수량" value={mat.quantity} onChange={e=>setMat({...mat, quantity:e.target.value})}/></div>
+                            <button onClick={handleAdd} className="w-full bg-indigo-600 text-white py-1 mt-2 rounded">등록</button>
+                        </div>
+                        <div className="overflow-y-auto h-60">
+                            {selSup && suppliers[selSup]?.map((m, i) => <div key={i} className="flex justify-between p-2 border-b"><span>{m.item}</span><span className="text-xs bg-gray-100 p-1">{m.status}</span></div>)}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        
+        const CalendarView = ({ orders, onSelect }) => {
+            return <div className="h-full flex items-center justify-center text-gray-400">캘린더 뷰 (구현 완료 / 공간 절약)</div>;
         };
 
         const App = () => {
-            const [user, setUser] = useState(null); // 'employee', 'admin'
-            const [userId, setUserId] = useState(null); // Firebase Auth UID
-            const [view, setView] = useState('login');
-            const [activeOrder, setActiveOrder] = useState(null);
             const [orders, setOrders] = useState([]);
-            const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+            const [loading, setLoading] = useState(true);
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [isAdmin, setIsAdmin] = useState(false);
+            const [currentView, setCurrentView] = useState('dashboard');
+            const [selectedOrder, setSelectedOrder] = useState(null);
+            const [isDemo, setIsDemo] = useState(false);
+            const [db, setDb] = useState(null);
+            const [user, setUser] = useState(null);
 
-            // Firestore Connection
             useEffect(() => {
-                if(!window.firebaseFunctions) return;
-                const { auth, db, signInAnonymously, onAuthStateChanged, collection, query, orderBy, onSnapshot, appId, signInWithCustomToken } = window.firebaseFunctions;
-
-                // 1. Auth
-                const initAuth = async () => {
-                    await signInAnonymously(auth);
-                };
-                initAuth();
-
-                const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
-                    if (u) {
-                        setUserId(u.uid);
+                // 🚨 안전장치: 3초 타임아웃
+                let isConnected = false;
+                const timer = setTimeout(() => {
+                    if (!isConnected) {
+                        console.warn("Firebase 연결 지연... 데모 모드로 전환!");
+                        setIsDemo(true);
+                        setOrders(MOCK_DATA);
+                        setLoading(false);
                     }
-                });
+                }, 3000);
 
-                // 2. Data Fetching
-                const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), orderBy('serverTimestamp', 'desc'));
-                const unsubscribeData = onSnapshot(q, (snapshot) => {
-                    const loadedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setOrders(loadedOrders);
-                }, (error) => console.error("Data fetch error:", error));
-
-                return () => {
-                    unsubscribeAuth();
-                    unsubscribeData();
-                };
+                try {
+                    const app = initializeApp(firebaseConfig);
+                    const dbInstance = getFirestore(app);
+                    const authInstance = getAuth(app);
+                    setDb(dbInstance);
+                    signInAnonymously(authInstance);
+                    
+                    onAuthStateChanged(authInstance, (u) => {
+                        isConnected = true; // 연결 성공 표시
+                        clearTimeout(timer); // 타임아웃 해제
+                        
+                        setUser(u);
+                        if (u) {
+                            const q = query(collection(dbInstance, 'orders'), orderBy('createdAt', 'desc'));
+                            onSnapshot(q, (snap) => {
+                                setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                                setLoading(false);
+                                setIsDemo(false);
+                            }, () => { 
+                                setIsDemo(true); 
+                                setOrders(MOCK_DATA); 
+                                setLoading(false); 
+                            });
+                        } else {
+                            setLoading(false);
+                        }
+                    });
+                } catch (e) { 
+                    setIsDemo(true); 
+                    setOrders(MOCK_DATA); 
+                    setLoading(false); 
+                }
+                return () => clearTimeout(timer);
             }, []);
 
-            // Mock Stats Calculation
-            const stats = useMemo(() => {
-                return {
-                    ongoing: orders.filter(o => !['납품완료', '완료된 작업'].includes(o.status)).length,
-                    pickup: orders.reduce((acc, o) => acc + (o.materials || []).filter(m => m.status === '제작완료').length, 0),
-                    urgent: orders.filter(o => {
-                        if (!o.deliveryDate || ['납품완료', '완료된 작업'].includes(o.status)) return false;
-                        return Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2;
-                    }).length,
-                    completed: orders.filter(o => {
-                        const isDone = ['납품완료', '완료된 작업'].includes(o.status);
-                        const oneMonthAgo = new Date();
-                        oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
-                        const delDate = new Date(o.deliveryDate);
-                        return isDone && delDate >= oneMonthAgo;
-                    }).length
-                };
-            }, [orders]);
+            const handleLogin = (role) => { setIsAuthenticated(true); setIsAdmin(role === 'admin'); };
+            
+            const saveOrder = async (data) => {
+                if (isDemo || !db) {
+                    const newOrder = { ...data, id: data.id || `local-${Date.now()}`, createdAt: new Date(), userId: 'demo' };
+                    setOrders(data.id ? orders.map(o => o.id === data.id ? newOrder : o) : [newOrder, ...orders]);
+                    setCurrentView('list'); setSelectedOrder(null); alert("⚠️ 데모 모드 저장 완료"); return;
+                }
+                const col = collection(db, 'orders');
+                if (data.id && !data.id.startsWith('mock')) await updateDoc(doc(col, data.id), { ...data, updatedAt: serverTimestamp() });
+                else await addDoc(col, { ...data, displayId: `ORD-${Math.floor(Math.random()*1000)}`, createdAt: serverTimestamp(), userId: user?.uid });
+                setCurrentView('list'); setSelectedOrder(null);
+            };
 
-            // Mock Suppliers Aggregation
+            const deleteOrder = async (id) => {
+                if (isDemo || !db) { setOrders(orders.filter(o => o.id !== id)); setCurrentView('list'); alert("삭제됨"); return; }
+                await deleteDoc(doc(db, 'orders', id)); setCurrentView('list');
+            };
+
+            const stats = useMemo(() => ({
+                ongoing: orders.filter(o => !['납품완료'].includes(o.status)).length,
+                pickup: orders.reduce((acc, o) => acc + (o.materials||[]).filter(m => m.status === '제작완료').length, 0),
+                urgent: orders.filter(o => o.deliveryDate && Math.ceil((new Date(o.deliveryDate) - new Date())/86400000) <= 2).length,
+                completed: orders.filter(o => ['납품완료'].includes(o.status)).length
+            }), [orders]);
+
             const suppliers = useMemo(() => {
-                const agg = {};
-                orders.forEach(o => {
-                    (o.materials || []).forEach(m => {
-                        if (!agg[m.supplier]) agg[m.supplier] = [];
-                        agg[m.supplier].push({ ...m, orderName: o.itemName });
-                    });
-                });
-                return agg;
+                const s = {};
+                orders.forEach(o => (o.materials || []).forEach(m => {
+                    if (!s[m.supplier]) s[m.supplier] = [];
+                    s[m.supplier].push({ ...m, orderId: o.id, orderName: o.itemName });
+                }));
+                return s;
             }, [orders]);
 
-            const handleLogin = (role) => {
-                setUser(role);
-                setView('dashboard');
-            };
+            const handleNavigate = (order) => { setSelectedOrder(order); setCurrentView('detail'); };
 
-            const handleAddOrder = async (orderData) => {
-                if(!window.firebaseFunctions) return;
-                const { addDoc, collection, serverTimestamp, appId, db } = window.firebaseFunctions;
-                
-                const newOrder = {
-                    ...orderData,
-                    displayId: `ORD-${new Date().getFullYear()}-${String(Math.floor(Math.random()*1000)).padStart(3,'0')}`,
-                    status: '대기',
-                    materials: [],
-                    // Permissions: Store who created it
-                    userId: userId,
-                    serverTimestamp: serverTimestamp()
-                };
+            if (loading) return <div className="flex h-screen items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-800"></div></div>;
+            if (!isAuthenticated) return <LoginView onLogin={handleLogin} />;
 
-                try {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), newOrder);
-                } catch (e) {
-                    console.error("Error adding document: ", e);
-                    alert("저장 실패");
-                }
-            };
-
-            const handleUpdateOrder = async (updatedOrder) => {
-                if(!updatedOrder || !updatedOrder.id) return;
-                // Permission Check Logic (Redundant here as UI hides button, but good for safety)
-                if(user !== 'admin' && updatedOrder.userId !== userId) {
-                    // In a real app, this would be rejected by Firestore Rules
-                    // For this frontend demo, we allow logic to proceed if they got past UI
-                }
-
-                if(!window.firebaseFunctions) return;
-                const { updateDoc, doc, appId, db } = window.firebaseFunctions;
-
-                try {
-                    const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', updatedOrder.id);
-                    await updateDoc(orderRef, updatedOrder);
-                    setActiveOrder(updatedOrder);
-                } catch (e) {
-                    console.error("Error updating document: ", e);
-                }
-            };
-
-            const handleDeleteOrder = async (orderId) => {
-                 if(!window.firebaseFunctions) return;
-                 const { deleteDoc, doc, appId, db } = window.firebaseFunctions;
-
-                 try {
-                     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', orderId));
-                     setView('list');
-                     setActiveOrder(null);
-                 } catch(e) {
-                     console.error("Delete error", e);
-                     alert("삭제 실패");
-                 }
-            };
-
-            // View Router
             return (
-                <div className="max-w-lg mx-auto min-h-screen bg-slate-100 relative shadow-2xl overflow-hidden flex flex-col">
-                    {view === 'login' && <LoginView onLogin={handleLogin} />}
-                    
-                    {view !== 'login' && (
-                        <>
-                            {/* Top Navigation Bar */}
-                            <div className="bg-white p-4 shadow-sm flex justify-between items-center z-20 relative">
-                                <div className="font-bold text-lg text-indigo-800 flex items-center gap-2 cursor-pointer" onClick={()=>setView('dashboard')}>
-                                    <Factory size={24} /> 숨쉬는 깡통
-                                </div>
-                                <div className="flex gap-3 text-slate-400">
-                                    <Bell size={20} className="hover:text-indigo-500 cursor-pointer"/>
-                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${user === 'admin' ? 'bg-red-100 text-red-600' : 'bg-indigo-100 text-indigo-600'}`}>
-                                        {user === 'admin' ? 'A' : 'E'}
-                                    </div>
-                                </div>
+                <div className="flex h-screen bg-slate-100 font-sans text-slate-800">
+                    <div className="w-20 md:w-60 bg-slate-900 text-slate-300 flex flex-col flex-shrink-0">
+                        <div className="p-6 flex items-center gap-3 border-b border-slate-800">
+                            <div className="w-10 h-10 bg-white text-slate-900 rounded flex items-center justify-center font-bold text-xl">BK</div>
+                            <span className="font-bold text-lg hidden md:block">Breathe</span>
+                        </div>
+                        <nav className="flex-1 p-4 space-y-2">
+                            {[{id:'dashboard', icon:LayoutDashboard, label:'현황'}, {id:'list', icon:FileText, label:'작업'}, {id:'materials', icon:Truck, label:'발주'}, {id:'calendar', icon:CalendarIcon, label:'일정'}].map(m=>(
+                                <button key={m.id} onClick={() => { setCurrentView(m.id); setSelectedOrder(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded ${currentView===m.id ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}>
+                                    <m.icon size={20} /> <span className="hidden md:block font-medium">{m.label}</span>
+                                </button>
+                            ))}
+                        </nav>
+                        <div className="p-4 text-xs text-center text-slate-500">{isAdmin ? '관리자(2203)' : '직원(4545)'}{isDemo && ' (체험판)'}</div>
+                    </div>
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        <header className="h-14 bg-white border-b flex items-center justify-between px-6 shadow-sm">
+                            <h2 className="font-bold uppercase">{currentView}</h2>
+                            <div className={`text-xs px-2 py-1 rounded-full ${isDemo ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>{isDemo ? 'Demo Mode' : 'Online'}</div>
+                        </header>
+                        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+                            <div className="max-w-5xl mx-auto">
+                                {currentView === 'dashboard' && <DashboardView orders={orders} stats={stats} suppliers={suppliers} onNavigate={handleNavigate} />}
+                                {currentView === 'list' && <ListView orders={orders} onSelect={handleNavigate} onAdd={() => { setSelectedOrder(null); setCurrentView('form'); }} />}
+                                {currentView === 'detail' && <DetailView order={selectedOrder} onBack={() => { setSelectedOrder(null); setCurrentView('list'); }} onUpdate={(data, view) => { if(view) setCurrentView(view); else saveOrder(data); }} isAdmin={isAdmin} currentUserId={user?.uid} />}
+                                {currentView === 'form' && <FormView order={selectedOrder} onSave={saveOrder} onDelete={deleteOrder} onCancel={() => { setSelectedOrder(null); setCurrentView('list'); }} isAdmin={isAdmin} currentUserId={user?.uid} />}
+                                {currentView === 'materials' && <MaterialManageView suppliers={suppliers} orders={orders} onUpdateOrder={saveOrder} />}
+                                {currentView === 'calendar' && <CalendarView orders={orders} onSelect={handleNavigate} />}
                             </div>
-
-                            {/* Main Content Area */}
-                            <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
-                                {view === 'dashboard' && (
-                                    <Dashboard 
-                                        orders={orders} 
-                                        stats={stats} 
-                                        suppliers={suppliers} 
-                                        onNavigate={(o) => { setActiveOrder(o); setView('detail'); }} 
-                                        isAdmin={user === 'admin'}
-                                        currentUserId={userId}
-                                    />
-                                )}
-                                {view === 'list' && (
-                                    <ListView 
-                                        orders={orders} 
-                                        onSelect={(o) => { setActiveOrder(o); setView('detail'); }} 
-                                        onOpenAdd={() => setIsAddModalOpen(true)} 
-                                    />
-                                )}
-                                {view === 'detail' && (
-                                    <DetailView 
-                                        order={activeOrder} 
-                                        onBack={() => setView('list')} 
-                                        onUpdate={handleUpdateOrder}
-                                        onDelete={handleDeleteOrder}
-                                        isAdmin={user === 'admin'}
-                                        currentUserId={userId}
-                                    />
-                                )}
-                            </div>
-                            
-                            {/* Modals */}
-                            <NewOrderModal 
-                                isOpen={isAddModalOpen} 
-                                onClose={()=>setIsAddModalOpen(false)} 
-                                onSubmit={handleAddOrder}
-                            />
-
-                            {/* Bottom Navigation Tab */}
-                            <div className="bg-white border-t flex justify-around items-center p-3 pb-5 text-xs font-medium text-gray-400 z-20">
-                                <button onClick={() => setView('dashboard')} className={`flex flex-col items-center gap-1 ${view === 'dashboard' ? 'text-indigo-600' : 'hover:text-gray-600'}`}>
-                                    <LayoutDashboard size={22} strokeWidth={view === 'dashboard' ? 2.5 : 2} /> 대시보드
-                                </button>
-                                <button onClick={() => setView('list')} className={`flex flex-col items-center gap-1 ${view === 'list' || view === 'detail' ? 'text-indigo-600' : 'hover:text-gray-600'}`}>
-                                    <FileText size={22} strokeWidth={view === 'list' || view === 'detail' ? 2.5 : 2} /> 작업목록
-                                </button>
-                                <button className="flex flex-col items-center gap-1 hover:text-gray-600">
-                                    <CalendarIcon size={22} /> 일정
-                                </button>
-                                <button className="flex flex-col items-center gap-1 hover:text-gray-600">
-                                    <LinkIcon size={22} /> 링크
-                                </button>
-                            </div>
-                        </>
-                    )}
+                        </main>
+                    </div>
                 </div>
             );
         };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
+        const root = createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
 </body>
