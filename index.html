@@ -374,118 +374,123 @@
             }, [activeStat, orders]);
 
             return (
-                <div className="space-y-6 animate-fade-in pb-10 relative">
-                {/* Stats Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Card className="p-4 border-l-4 border-blue-600 cursor-pointer hover:bg-blue-50" onClick={()=>setActiveStat('ongoing')}>
-                        <div className="text-xs text-gray-500">진행 중</div>
-                        <div className="text-2xl font-bold">{stats.ongoing}건</div>
-                    </Card>
-                    <Card className="p-4 border-l-4 border-indigo-500 cursor-pointer hover:bg-indigo-50" onClick={()=>setActiveStat('pickup')}>
-                        <div className="text-xs text-gray-500">회수 대기</div>
-                        <div className="text-2xl font-bold text-indigo-600 animate-pulse">{stats.pickup}건</div>
-                    </Card>
-                    <Card className="p-4 border-l-4 border-red-500 cursor-pointer hover:bg-red-50" onClick={()=>setActiveStat('urgent')}>
-                        <div className="text-xs text-gray-500">마감 임박</div>
-                        <div className="text-2xl font-bold text-red-600">{stats.urgent}건</div>
-                    </Card>
-                    <Card className="p-4 border-l-4 border-slate-400 cursor-pointer hover:bg-slate-100" onClick={()=>setActiveStat('completed')}>
-                        <div className="text-xs text-gray-500">최근 완료</div>
-                        <div className="text-2xl font-bold text-slate-500">{stats.completed}건</div>
-                    </Card>
-                </div>
+                <>
+                    {/* Main Content with Animation */}
+                    <div className="space-y-6 animate-fade-in pb-10 relative">
+                        {/* Stats Grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <Card className="p-4 border-l-4 border-blue-600 cursor-pointer hover:bg-blue-50" onClick={()=>setActiveStat('ongoing')}>
+                                <div className="text-xs text-gray-500">진행 중</div>
+                                <div className="text-2xl font-bold">{stats.ongoing}건</div>
+                            </Card>
+                            <Card className="p-4 border-l-4 border-indigo-500 cursor-pointer hover:bg-indigo-50" onClick={()=>setActiveStat('pickup')}>
+                                <div className="text-xs text-gray-500">회수 대기</div>
+                                <div className="text-2xl font-bold text-indigo-600 animate-pulse">{stats.pickup}건</div>
+                            </Card>
+                            <Card className="p-4 border-l-4 border-red-500 cursor-pointer hover:bg-red-50" onClick={()=>setActiveStat('urgent')}>
+                                <div className="text-xs text-gray-500">마감 임박</div>
+                                <div className="text-2xl font-bold text-red-600">{stats.urgent}건</div>
+                            </Card>
+                            <Card className="p-4 border-l-4 border-slate-400 cursor-pointer hover:bg-slate-100" onClick={()=>setActiveStat('completed')}>
+                                <div className="text-xs text-gray-500">최근 완료</div>
+                                <div className="text-2xl font-bold text-slate-500">{stats.completed}건</div>
+                            </Card>
+                        </div>
 
-                {/* Stat Modal Overlay */}
-                {activeStat && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={()=>setActiveStat(null)}>
-                        <div className="bg-white w-full max-w-md rounded-xl shadow-2xl p-4 max-h-[80vh] overflow-y-auto scroll-touch" onClick={e=>e.stopPropagation()}>
-                            <div className="flex justify-between mb-4">
-                                <h3 className="font-bold text-lg">상세 내역 ({statList.length})</h3>
-                                <button onClick={()=>setActiveStat(null)}><X size={20}/></button>
-                            </div>
-                            <div className="space-y-2">
-                                {statList.length === 0 && <div className="text-gray-400">내역이 없습니다.</div>}
-                                {statList.map((item, i) => (
-                                    <div key={i} className="border p-3 rounded hover:bg-slate-50 cursor-pointer" onClick={()=>{
-                                        const order = activeStat === 'pickup' ? orders.find(o=>o.id===item.orderId) : item;
-                                        if(order) { onNavigate(order); setActiveStat(null); }
-                                    }}>
-                                        <div className="font-bold">{activeStat==='pickup' ? item.item : item.itemName}</div>
-                                        <div className="text-xs text-gray-500">{activeStat==='pickup' ? `${item.supplier} - ${item.quantity}` : item.status}</div>
+                        <button onClick={generateBriefing} disabled={isGeneratingBriefing} className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 rounded-xl shadow-lg font-bold flex items-center justify-center gap-2 hover:opacity-90">
+                            {isGeneratingBriefing ? 'AI가 작성중...' : <><Sparkles size={18}/> AI 일일 브리핑 생성</>}
+                        </button>
+
+                        <div>
+                            <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><FileText size={18}/> 최신 작업</h3>
+                            <div className="grid gap-3">
+                            {orders.filter(o => !['납품완료', '작업완료'].includes(o.status)).slice(0, 3).map(o => (
+                                <Card key={o.id} className="p-4 flex justify-between items-center cursor-pointer hover:border-blue-400" onClick={() => onNavigate(o)}>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1"><StatusBadge status={o.status} /><span className="text-xs text-gray-400">{o.displayId}</span></div>
+                                        <div className="font-bold">{o.itemName}</div>
                                     </div>
+                                    <div className="text-sm font-bold text-red-500">{o.deliveryDate} 마감</div>
+                                </Card>
+                            ))}
+                            </div>
+                        </div>
+
+                        <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5">
+                            <div className="flex items-center gap-2 text-indigo-900 font-bold mb-3"><Truck size={20} /><h3>최적 회수 동선</h3></div>
+                            {optimizedRoute.length > 0 ? (
+                            <div className="flex flex-wrap gap-2 items-center">
+                                <span className="text-xs bg-white px-2 py-1 rounded border">출발</span>
+                                {optimizedRoute.map((stop, i) => (
+                                    <React.Fragment key={i}>
+                                        <ArrowRight size={14} className="text-indigo-300" />
+                                        <button onClick={() => setActiveRoutePopup(stop)} className="bg-indigo-600 text-white px-3 py-2 rounded shadow text-sm font-bold hover:bg-indigo-700">
+                                            {i+1}. {stop.name} <span className="bg-white/20 px-1 rounded text-[10px] ml-1">{stop.count}</span>
+                                        </button>
+                                    </React.Fragment>
                                 ))}
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Briefing Modal */}
-                {aiBriefing && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={()=>setAiBriefing(null)}>
-                        <div className="bg-white w-full max-w-md rounded-xl p-6" onClick={e=>e.stopPropagation()}>
-                            <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Sparkles className="text-yellow-500"/> AI 브리핑</h3>
-                            <div className="bg-slate-50 p-4 rounded text-sm mb-4 whitespace-pre-wrap leading-relaxed font-medium text-slate-700">{aiBriefing}</div>
-                            <button onClick={()=>setAiBriefing(null)} className="w-full bg-slate-800 text-white py-2 rounded font-bold">닫기</button>
-                        </div>
-                    </div>
-                )}
-                
-                {/* Route Modal */}
-                {activeRoutePopup && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={()=>setActiveRoutePopup(null)}>
-                        <div className="bg-white w-full max-w-sm rounded-xl p-4" onClick={e=>e.stopPropagation()}>
-                            <h3 className="font-bold text-lg mb-2">{activeRoutePopup.name}</h3>
-                            <div className="text-sm text-gray-500 mb-4">{activeRoutePopup.address}</div>
-                            <div className="space-y-2 mb-4">
-                                {(suppliers[activeRoutePopup.name] || []).filter(m=>m.status==='회수대기').map((item, i)=>(
-                                    <div key={i} className="bg-slate-50 p-2 rounded text-sm flex justify-between">
-                                        <span>{item.item}</span><span className="font-bold">{item.quantity}</span>
-                                    </div>
-                                ))}
-                            </div>
-                            <a href={`https://map.naver.com/p/search/${activeRoutePopup.address}`} target="_blank" className="block w-full bg-indigo-600 text-white text-center py-3 rounded font-bold">지도 열기</a>
-                        </div>
-                    </div>
-                )}
-
-                <button onClick={generateBriefing} disabled={isGeneratingBriefing} className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 rounded-xl shadow-lg font-bold flex items-center justify-center gap-2 hover:opacity-90">
-                    {isGeneratingBriefing ? 'AI가 작성중...' : <><Sparkles size={18}/> AI 일일 브리핑 생성</>}
-                </button>
-
-                <div>
-                    <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><FileText size={18}/> 최신 작업</h3>
-                    <div className="grid gap-3">
-                    {orders.filter(o => !['납품완료', '작업완료'].includes(o.status)).slice(0, 3).map(o => (
-                        <Card key={o.id} className="p-4 flex justify-between items-center cursor-pointer hover:border-blue-400" onClick={() => onNavigate(o)}>
-                            <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1"><StatusBadge status={o.status} /><span className="text-xs text-gray-400">{o.displayId}</span></div>
-                                <div className="font-bold">{o.itemName}</div>
-                            </div>
-                            <div className="text-sm font-bold text-red-500">{o.deliveryDate} 마감</div>
-                        </Card>
-                    ))}
-                    </div>
-                </div>
-
-                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5">
-                    <div className="flex items-center gap-2 text-indigo-900 font-bold mb-3"><Truck size={20} /><h3>최적 회수 동선</h3></div>
-                    {optimizedRoute.length > 0 ? (
-                    <div className="flex flex-wrap gap-2 items-center">
-                        <span className="text-xs bg-white px-2 py-1 rounded border">출발</span>
-                        {optimizedRoute.map((stop, i) => (
-                            <React.Fragment key={i}>
                                 <ArrowRight size={14} className="text-indigo-300" />
-                                <button onClick={() => setActiveRoutePopup(stop)} className="bg-indigo-600 text-white px-3 py-2 rounded shadow text-sm font-bold hover:bg-indigo-700">
-                                    {i+1}. {stop.name} <span className="bg-white/20 px-1 rounded text-[10px] ml-1">{stop.count}</span>
-                                </button>
-                            </React.Fragment>
-                        ))}
-                        <ArrowRight size={14} className="text-indigo-300" />
-                        <span className="text-xs bg-white px-2 py-1 rounded border">복귀</span>
+                                <span className="text-xs bg-white px-2 py-1 rounded border">복귀</span>
+                            </div>
+                            ) : <div className="text-sm text-indigo-400">회수할 자재가 없습니다.</div>}
+                        </div>
                     </div>
-                    ) : <div className="text-sm text-indigo-400">회수할 자재가 없습니다.</div>}
-                </div>
-                </div>
+
+                    {/* Modals moved outside of the animated container to fix position issues */}
+                    
+                    {/* Stat Modal Overlay */}
+                    {activeStat && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={()=>setActiveStat(null)}>
+                            <div className="bg-white w-full max-w-md rounded-xl shadow-2xl p-4 max-h-[80vh] overflow-y-auto scroll-touch" onClick={e=>e.stopPropagation()}>
+                                <div className="flex justify-between mb-4">
+                                    <h3 className="font-bold text-lg">상세 내역 ({statList.length})</h3>
+                                    <button onClick={()=>setActiveStat(null)}><X size={20}/></button>
+                                </div>
+                                <div className="space-y-2">
+                                    {statList.length === 0 && <div className="text-gray-400">내역이 없습니다.</div>}
+                                    {statList.map((item, i) => (
+                                        <div key={i} className="border p-3 rounded hover:bg-slate-50 cursor-pointer" onClick={()=>{
+                                            const order = activeStat === 'pickup' ? orders.find(o=>o.id===item.orderId) : item;
+                                            if(order) { onNavigate(order); setActiveStat(null); }
+                                        }}>
+                                            <div className="font-bold">{activeStat==='pickup' ? item.item : item.itemName}</div>
+                                            <div className="text-xs text-gray-500">{activeStat==='pickup' ? `${item.supplier} - ${item.quantity}` : item.status}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Briefing Modal */}
+                    {aiBriefing && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={()=>setAiBriefing(null)}>
+                            <div className="bg-white w-full max-w-md rounded-xl p-6" onClick={e=>e.stopPropagation()}>
+                                <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Sparkles className="text-yellow-500"/> AI 브리핑</h3>
+                                <div className="bg-slate-50 p-4 rounded text-sm mb-4 whitespace-pre-wrap leading-relaxed font-medium text-slate-700">{aiBriefing}</div>
+                                <button onClick={()=>setAiBriefing(null)} className="w-full bg-slate-800 text-white py-2 rounded font-bold">닫기</button>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {/* Route Modal */}
+                    {activeRoutePopup && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={()=>setActiveRoutePopup(null)}>
+                            <div className="bg-white w-full max-w-sm rounded-xl p-4" onClick={e=>e.stopPropagation()}>
+                                <h3 className="font-bold text-lg mb-2">{activeRoutePopup.name}</h3>
+                                <div className="text-sm text-gray-500 mb-4">{activeRoutePopup.address}</div>
+                                <div className="space-y-2 mb-4">
+                                    {(suppliers[activeRoutePopup.name] || []).filter(m=>m.status==='회수대기').map((item, i)=>(
+                                        <div key={i} className="bg-slate-50 p-2 rounded text-sm flex justify-between">
+                                            <span>{item.item}</span><span className="font-bold">{item.quantity}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <a href={`https://map.naver.com/p/search/${activeRoutePopup.address}`} target="_blank" className="block w-full bg-indigo-600 text-white text-center py-3 rounded font-bold">지도 열기</a>
+                            </div>
+                        </div>
+                    )}
+                </>
             );
         };
 
@@ -1133,11 +1138,10 @@
             };
 
             return (
-                <div className="flex h-full gap-4 animate-fade-in flex-col md:flex-row overflow-hidden relative">
-                
-                {/* 수정 모달 (fixed로 변경하여 잘림 방지) */}
+                <>
+                {/* 수정 모달 (애니메이션 컨테이너 밖으로 이동) */}
                 {editingMaterial && (
-                    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
+                    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20 backdrop-blur-sm p-4 animate-fade-in">
                         <Card className="w-full max-w-sm p-4 shadow-xl border-indigo-200 bg-white" onClick={e=>e.stopPropagation()}>
                             <h3 className="font-bold text-lg mb-3 flex items-center gap-2"><Edit3 size={18}/> 자재 수정</h3>
                             <div className="space-y-3">
@@ -1166,157 +1170,159 @@
                     </div>
                 )}
 
-                <div className="w-full md:w-1/3 overflow-y-auto space-y-2 pr-0 md:pr-2 max-h-[200px] md:max-h-full flex-shrink-0 scroll-touch">
-                    <div onClick={() => { setIsCustomMode(true); setSelectedSupplier(null); setBatchHeader(prev=>({...prev, supplier: ''})); }} className={`p-3 border rounded-lg cursor-pointer transition-all flex items-center gap-2 ${isCustomMode ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
-                    <Plus size={16} />
-                    <span className="font-bold">직접 입력 (새 거래처)</span>
-                    </div>
-                    <div onClick={() => { setSelectedSupplier(null); setIsCustomMode(false); }} className={`p-3 border rounded-lg cursor-pointer transition-all flex items-center gap-2 ${!selectedSupplier && !isCustomMode ? 'bg-slate-800 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
-                        <FileText size={16} />
-                        <span className="font-bold">전체 보기</span>
-                    </div>
-                    {sortedSuppliers.map(s => {
-                    return (
-                        <div key={s.name} onClick={() => { setSelectedSupplier(s.name); setIsCustomMode(false); }} className={`p-3 border rounded-lg cursor-pointer transition-all ${selectedSupplier === s.name && !isCustomMode ? 'bg-slate-800 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="font-bold">{s.name}</span>
-                            {s.pickupCnt > 0 && <span className="bg-indigo-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold animate-pulse">회수 {s.pickupCnt}</span>}
+                <div className="flex h-full gap-4 animate-fade-in flex-col md:flex-row overflow-hidden relative">
+                    <div className="w-full md:w-1/3 overflow-y-auto space-y-2 pr-0 md:pr-2 max-h-[200px] md:max-h-full flex-shrink-0 scroll-touch">
+                        <div onClick={() => { setIsCustomMode(true); setSelectedSupplier(null); setBatchHeader(prev=>({...prev, supplier: ''})); }} className={`p-3 border rounded-lg cursor-pointer transition-all flex items-center gap-2 ${isCustomMode ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
+                        <Plus size={16} />
+                        <span className="font-bold">직접 입력 (새 거래처)</span>
                         </div>
-                        <div className="text-xs opacity-70">발주중 {s.activeCnt}건 / 총 {s.items.length}건</div>
+                        <div onClick={() => { setSelectedSupplier(null); setIsCustomMode(false); }} className={`p-3 border rounded-lg cursor-pointer transition-all flex items-center gap-2 ${!selectedSupplier && !isCustomMode ? 'bg-slate-800 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
+                            <FileText size={16} />
+                            <span className="font-bold">전체 보기</span>
                         </div>
-                    )
-                    })}
-                </div>
-
-                <div className="w-full md:w-2/3 bg-white border rounded-xl p-4 md:p-6 flex flex-col overflow-hidden">
-                    <div className="mb-4 pb-4 border-b flex-shrink-0">
-                        <div className="flex justify-between items-start mb-2">
-                        {isCustomMode ? (
-                            <input className="text-2xl font-bold border-b border-gray-300 focus:border-indigo-500 outline-none placeholder-gray-300 w-full" placeholder="거래처명 입력" value={batchHeader.supplier} onChange={e => setBatchHeader({...batchHeader, supplier: e.target.value})}/>
-                        ) : (
-                            <h2 className="text-2xl font-bold truncate">{selectedSupplier || "전체 발주 내역"}</h2>
-                        )}
-                        <button onClick={() => setQuickAdd(!quickAdd)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold flex items-center gap-1 flex-shrink-0 ml-2"><Plus size={14} /> 자재 등록</button>
-                        </div>
-                        
-                        {!isCustomMode && selectedSupplier && (
-                            <div className="bg-slate-50 p-3 rounded">
-                                {!isEditingInfo ? (
-                                    <div className="flex flex-wrap gap-4 text-xs md:text-sm text-gray-600 items-center">
-                                        {currentSupplierInfo.phone ? <div className="flex items-center gap-1"><Phone size={14} /> {currentSupplierInfo.phone}</div> : <span className="text-gray-400">전화번호 없음</span>}
-                                        {currentSupplierInfo.address ? <div className="flex items-center gap-1"><MapPin size={14} /> {currentSupplierInfo.address}</div> : <span className="text-gray-400">주소 없음</span>}
-                                        <button onClick={() => setIsEditingInfo(true)} className="ml-auto p-1 hover:bg-slate-200 rounded text-indigo-600">
-                                            <Edit3 size={14}/>
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                            <input placeholder="전화번호" className="border p-2 rounded text-sm" value={editingInfoData.phone} onChange={e => setEditingInfoData({...editingInfoData, phone: e.target.value})}/>
-                                            <input placeholder="이메일" className="border p-2 rounded text-sm" value={editingInfoData.email} onChange={e => setEditingInfoData({...editingInfoData, email: e.target.value})}/>
-                                            <input placeholder="주소" className="border p-2 rounded text-sm" value={editingInfoData.address} onChange={e => setEditingInfoData({...editingInfoData, address: e.target.value})}/>
-                                        </div>
-                                        <div className="flex justify-end gap-2">
-                                            <button onClick={() => setIsEditingInfo(false)} className="text-xs text-gray-500 hover:underline">취소</button>
-                                            <button onClick={handleSaveInfo} className="text-xs bg-indigo-600 text-white px-3 py-1 rounded font-bold">저장</button>
-                                        </div>
-                                    </div>
-                                )}
+                        {sortedSuppliers.map(s => {
+                        return (
+                            <div key={s.name} onClick={() => { setSelectedSupplier(s.name); setIsCustomMode(false); }} className={`p-3 border rounded-lg cursor-pointer transition-all ${selectedSupplier === s.name && !isCustomMode ? 'bg-slate-800 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
+                            <div className="flex justify-between items-center mb-1">
+                                <span className="font-bold">{s.name}</span>
+                                {s.pickupCnt > 0 && <span className="bg-indigo-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold animate-pulse">회수 {s.pickupCnt}</span>}
                             </div>
-                        )}
-                        
-                        {isCustomMode && (
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-slate-50 p-3 rounded mt-2">
-                                <input placeholder="전화번호" className="border p-2 rounded text-sm" value={newSupplierInfo.phone} onChange={e => setNewSupplierInfo({...newSupplierInfo, phone: e.target.value})}/>
-                                <input placeholder="이메일" className="border p-2 rounded text-sm" value={newSupplierInfo.email} onChange={e => setNewSupplierInfo({...newSupplierInfo, email: e.target.value})}/>
-                                <input placeholder="주소 (회수 동선용)" className="border p-2 rounded text-sm" value={newSupplierInfo.address} onChange={e => setNewSupplierInfo({...newSupplierInfo, address: e.target.value})}/>
+                            <div className="text-xs opacity-70">발주중 {s.activeCnt}건 / 총 {s.items.length}건</div>
                             </div>
-                        )}
+                        )
+                        })}
                     </div>
 
-                    {(quickAdd || isCustomMode) && (
-                        <div className="mb-4 p-3 bg-indigo-50 rounded border border-indigo-100 animate-fade-in flex-shrink-0">
-                        <div className="text-sm font-bold text-indigo-800 mb-2">새 자재 발주 / 거래처 등록</div>
-                        <div className="space-y-2 mb-3">
-                             {/* 공통 정보 입력 */}
-                            <div className="flex gap-2">
-                                <input type="date" className="border p-2 rounded text-sm w-1/3 min-w-[120px]" value={batchHeader.date} onChange={e => setBatchHeader({ ...batchHeader, date: e.target.value })} />
-                                <select className="border p-2 rounded flex-1 text-sm min-w-0" value={batchHeader.orderId} onChange={e => setBatchHeader({ ...batchHeader, orderId: e.target.value })}>
-                                <option value="">프로젝트 선택 (없으면 기타)</option>
-                                {orders.filter(o => !['납품완료'].includes(o.status)).map(o => <option key={o.id} value={o.id}>{o.itemName}</option>)}
-                                </select>
-                            </div>
-                            
-                            {/* 다중 품목 입력 리스트 */}
-                            <div className="space-y-2">
-                                {batchItems.map((row, index) => (
-                                    <div key={row.id} className="flex gap-2 items-center animate-fade-in">
-                                        <span className="text-xs font-bold text-gray-400 w-4 text-center">{index + 1}</span>
-                                        <input 
-                                            placeholder={isCustomMode ? "품목명 (정보만 저장시 빈칸)" : "품목명"} 
-                                            className="border p-2 rounded flex-1 text-sm min-w-0" 
-                                            value={row.item} 
-                                            onChange={e => updateRow(row.id, 'item', e.target.value)} 
-                                        />
-                                        <input 
-                                            placeholder="수량" 
-                                            className="border p-2 rounded w-16 md:w-20 text-sm text-center" 
-                                            value={row.quantity} 
-                                            onChange={e => updateRow(row.id, 'quantity', e.target.value)} 
-                                        />
-                                        <button onClick={() => removeRow(row.id)} className="text-gray-400 hover:text-red-500">
-                                            <X size={18} />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                            
-                            <button onClick={addRow} className="text-xs text-indigo-600 font-bold flex items-center gap-1 hover:underline mt-1">
-                                <Plus size={14}/> 품목 추가하기
-                            </button>
-                        </div>
-                        <button onClick={handleBatchAdd} className="w-full bg-indigo-600 text-white py-2 rounded text-sm font-bold hover:bg-indigo-700">
-                            {isCustomMode && batchItems.every(i => !i.item) ? "거래처 정보만 등록" : "일괄 등록하기"}
-                        </button>
-                        </div>
-                    )}
-
-                    <div className="flex-1 overflow-y-auto scroll-touch">
-                        <table className="w-full text-sm text-left min-w-[300px]">
-                        <thead className="bg-slate-50 border-b sticky top-0 z-10">
-                            <tr>
-                                <th className="p-2 w-16">상태</th>
-                                {!selectedSupplier && <th className="p-2 w-20">거래처</th>}
-                                <th className="p-2">품목/수량</th>
-                                <th className="p-2 text-right w-16">관리</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {displayedMaterials.length > 0 ? displayedMaterials.map((m, i) => (
-                            <tr key={i} className="border-b hover:bg-slate-50 group">
-                                <td className="p-2 align-top pt-3"><MaterialStatusBadge status={m.status} onClick={() => toggleStatus(m)} /></td>
-                                {!selectedSupplier && <td className="p-2 align-top pt-3 font-bold text-slate-700 text-xs break-words">{m.supplier}</td>}
-                                <td className="p-2">
-                                    <div className="text-[10px] text-gray-400 mb-0.5">{m.date}</div>
-                                    <div className="font-bold text-slate-700">{m.item}</div>
-                                    <div className="text-xs text-gray-500">{m.quantity}</div>
-                                    <div className="text-[10px] text-indigo-500 mt-0.5">{m.orderName}</div>
-                                </td>
-                                <td className="p-2 text-right align-top pt-2">
-                                    <div className="flex justify-end gap-1 md:opacity-50 md:group-hover:opacity-100 transition-opacity opacity-100">
-                                        <button onClick={()=>setEditingMaterial(m)} className="p-1.5 hover:bg-blue-100 text-blue-600 rounded"><Edit3 size={14}/></button>
-                                        <button onClick={()=>handleDelete(m)} className="p-1.5 hover:bg-red-100 text-red-600 rounded"><Trash2 size={14}/></button>
-                                    </div>
-                                </td>
-                            </tr>
-                            )) : (
-                            <tr><td colSpan="5" className="p-8 text-center text-gray-400">등록된 발주 내역이 없습니다.</td></tr>
+                    <div className="w-full md:w-2/3 bg-white border rounded-xl p-4 md:p-6 flex flex-col overflow-hidden">
+                        <div className="mb-4 pb-4 border-b flex-shrink-0">
+                            <div className="flex justify-between items-start mb-2">
+                            {isCustomMode ? (
+                                <input className="text-2xl font-bold border-b border-gray-300 focus:border-indigo-500 outline-none placeholder-gray-300 w-full" placeholder="거래처명 입력" value={batchHeader.supplier} onChange={e => setBatchHeader({...batchHeader, supplier: e.target.value})}/>
+                            ) : (
+                                <h2 className="text-2xl font-bold truncate">{selectedSupplier || "전체 발주 내역"}</h2>
                             )}
-                        </tbody>
-                        </table>
+                            <button onClick={() => setQuickAdd(!quickAdd)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold flex items-center gap-1 flex-shrink-0 ml-2"><Plus size={14} /> 자재 등록</button>
+                            </div>
+                            
+                            {!isCustomMode && selectedSupplier && (
+                                <div className="bg-slate-50 p-3 rounded">
+                                    {!isEditingInfo ? (
+                                        <div className="flex flex-wrap gap-4 text-xs md:text-sm text-gray-600 items-center">
+                                            {currentSupplierInfo.phone ? <div className="flex items-center gap-1"><Phone size={14} /> {currentSupplierInfo.phone}</div> : <span className="text-gray-400">전화번호 없음</span>}
+                                            {currentSupplierInfo.address ? <div className="flex items-center gap-1"><MapPin size={14} /> {currentSupplierInfo.address}</div> : <span className="text-gray-400">주소 없음</span>}
+                                            <button onClick={() => setIsEditingInfo(true)} className="ml-auto p-1 hover:bg-slate-200 rounded text-indigo-600">
+                                                <Edit3 size={14}/>
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                                <input placeholder="전화번호" className="border p-2 rounded text-sm" value={editingInfoData.phone} onChange={e => setEditingInfoData({...editingInfoData, phone: e.target.value})}/>
+                                                <input placeholder="이메일" className="border p-2 rounded text-sm" value={editingInfoData.email} onChange={e => setEditingInfoData({...editingInfoData, email: e.target.value})}/>
+                                                <input placeholder="주소" className="border p-2 rounded text-sm" value={editingInfoData.address} onChange={e => setEditingInfoData({...editingInfoData, address: e.target.value})}/>
+                                            </div>
+                                            <div className="flex justify-end gap-2">
+                                                <button onClick={() => setIsEditingInfo(false)} className="text-xs text-gray-500 hover:underline">취소</button>
+                                                <button onClick={handleSaveInfo} className="text-xs bg-indigo-600 text-white px-3 py-1 rounded font-bold">저장</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            
+                            {isCustomMode && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-slate-50 p-3 rounded mt-2">
+                                    <input placeholder="전화번호" className="border p-2 rounded text-sm" value={newSupplierInfo.phone} onChange={e => setNewSupplierInfo({...newSupplierInfo, phone: e.target.value})}/>
+                                    <input placeholder="이메일" className="border p-2 rounded text-sm" value={newSupplierInfo.email} onChange={e => setNewSupplierInfo({...newSupplierInfo, email: e.target.value})}/>
+                                    <input placeholder="주소 (회수 동선용)" className="border p-2 rounded text-sm" value={newSupplierInfo.address} onChange={e => setNewSupplierInfo({...newSupplierInfo, address: e.target.value})}/>
+                                </div>
+                            )}
+                        </div>
+
+                        {(quickAdd || isCustomMode) && (
+                            <div className="mb-4 p-3 bg-indigo-50 rounded border border-indigo-100 animate-fade-in flex-shrink-0">
+                            <div className="text-sm font-bold text-indigo-800 mb-2">새 자재 발주 / 거래처 등록</div>
+                            <div className="space-y-2 mb-3">
+                                 {/* 공통 정보 입력 */}
+                                <div className="flex gap-2">
+                                    <input type="date" className="border p-2 rounded text-sm w-1/3 min-w-[120px]" value={batchHeader.date} onChange={e => setBatchHeader({ ...batchHeader, date: e.target.value })} />
+                                    <select className="border p-2 rounded flex-1 text-sm min-w-0" value={batchHeader.orderId} onChange={e => setBatchHeader({ ...batchHeader, orderId: e.target.value })}>
+                                    <option value="">프로젝트 선택 (없으면 기타)</option>
+                                    {orders.filter(o => !['납품완료'].includes(o.status)).map(o => <option key={o.id} value={o.id}>{o.itemName}</option>)}
+                                    </select>
+                                </div>
+                                
+                                {/* 다중 품목 입력 리스트 */}
+                                <div className="space-y-2">
+                                    {batchItems.map((row, index) => (
+                                        <div key={row.id} className="flex gap-2 items-center animate-fade-in">
+                                            <span className="text-xs font-bold text-gray-400 w-4 text-center">{index + 1}</span>
+                                            <input 
+                                                placeholder={isCustomMode ? "품목명 (정보만 저장시 빈칸)" : "품목명"} 
+                                                className="border p-2 rounded flex-1 text-sm min-w-0" 
+                                                value={row.item} 
+                                                onChange={e => updateRow(row.id, 'item', e.target.value)} 
+                                            />
+                                            <input 
+                                                placeholder="수량" 
+                                                className="border p-2 rounded w-16 md:w-20 text-sm text-center" 
+                                                value={row.quantity} 
+                                                onChange={e => updateRow(row.id, 'quantity', e.target.value)} 
+                                            />
+                                            <button onClick={() => removeRow(row.id)} className="text-gray-400 hover:text-red-500">
+                                                <X size={18} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                
+                                <button onClick={addRow} className="text-xs text-indigo-600 font-bold flex items-center gap-1 hover:underline mt-1">
+                                    <Plus size={14}/> 품목 추가하기
+                                </button>
+                            </div>
+                            <button onClick={handleBatchAdd} className="w-full bg-indigo-600 text-white py-2 rounded text-sm font-bold hover:bg-indigo-700">
+                                {isCustomMode && batchItems.every(i => !i.item) ? "거래처 정보만 등록" : "일괄 등록하기"}
+                            </button>
+                            </div>
+                        )}
+
+                        <div className="flex-1 overflow-y-auto scroll-touch">
+                            <table className="w-full text-sm text-left min-w-[300px]">
+                            <thead className="bg-slate-50 border-b sticky top-0 z-10">
+                                <tr>
+                                    <th className="p-2 w-16">상태</th>
+                                    {!selectedSupplier && <th className="p-2 w-20">거래처</th>}
+                                    <th className="p-2">품목/수량</th>
+                                    <th className="p-2 text-right w-16">관리</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {displayedMaterials.length > 0 ? displayedMaterials.map((m, i) => (
+                                <tr key={i} className="border-b hover:bg-slate-50 group">
+                                    <td className="p-2 align-top pt-3"><MaterialStatusBadge status={m.status} onClick={() => toggleStatus(m)} /></td>
+                                    {!selectedSupplier && <td className="p-2 align-top pt-3 font-bold text-slate-700 text-xs break-words">{m.supplier}</td>}
+                                    <td className="p-2">
+                                        <div className="text-[10px] text-gray-400 mb-0.5">{m.date}</div>
+                                        <div className="font-bold text-slate-700">{m.item}</div>
+                                        <div className="text-xs text-gray-500">{m.quantity}</div>
+                                        <div className="text-[10px] text-indigo-500 mt-0.5">{m.orderName}</div>
+                                    </td>
+                                    <td className="p-2 text-right align-top pt-2">
+                                        <div className="flex justify-end gap-1 md:opacity-50 md:group-hover:opacity-100 transition-opacity opacity-100">
+                                            <button onClick={()=>setEditingMaterial(m)} className="p-1.5 hover:bg-blue-100 text-blue-600 rounded"><Edit3 size={14}/></button>
+                                            <button onClick={()=>handleDelete(m)} className="p-1.5 hover:bg-red-100 text-red-600 rounded"><Trash2 size={14}/></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                )) : (
+                                <tr><td colSpan="5" className="p-8 text-center text-gray-400">등록된 발주 내역이 없습니다.</td></tr>
+                                )}
+                            </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
-                </div>
+                </>
             );
         };
 
