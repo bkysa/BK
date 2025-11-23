@@ -191,7 +191,6 @@
             );
         };
 
-        // 🌟 StatusBadge 수정: 클릭 이벤트 추가
         const StatusBadge = ({ status, onClick, clickable = false }) => {
             const colors = {
                 '설계중': 'bg-gray-100 text-gray-600 border border-gray-300',
@@ -884,8 +883,7 @@
             );
         };
 
-        // (MaterialManageView 및 CalendarView는 변경 없음, 기존 코드 유지)
-        const MaterialManageView = ({ suppliers, orders, onUpdateOrder }) => {
+        const MaterialManageView = ({ suppliers, orders, onUpdateOrder, onMaterialStatusClick }) => {
             const [selectedSupplier, setSelectedSupplier] = useState(null);
             const [isCustomMode, setIsCustomMode] = useState(false);
             const [editingMaterial, setEditingMaterial] = useState(null);
@@ -1124,12 +1122,8 @@
 
             const toggleStatus = async (m) => {
                 if (m.status === '정보') return;
-                const order = orders.find(o => o.id === m.orderId);
-                if (order) {
-                    const nextStatus = cycleStatus(m.status);
-                    const updated = order.materials.map(x => x.id === m.id ? { ...x, status: nextStatus } : x);
-                    await onUpdateOrder({ ...order, materials: updated }, false);
-                }
+                const nextStatus = cycleStatus(m.status);
+                onMaterialStatusClick(m, nextStatus);
             };
 
             const handleDelete = async (m) => {
@@ -1433,6 +1427,9 @@
 
             const [statusPopupOrder, setStatusPopupOrder] = useState(null);
             const [pendingStatus, setPendingStatus] = useState(null);
+            
+            // 🌟 [추가] 자재 상태 변경 팝업용 상태
+            const [materialPopupData, setMaterialPopupData] = useState(null); // { material, nextStatus }
 
             // 🌟 [추가] 브라우저/모바일 뒤로가기 버튼 핸들링
             useEffect(() => {
@@ -1594,6 +1591,19 @@
                 setPendingStatus(null);
                 setStatusPopupOrder(null);
             };
+            
+            // 🌟 [추가] 자재 상태 변경 실행
+            const executeMaterialStatusChange = async () => {
+                if (!materialPopupData) return;
+                const { material, nextStatus } = materialPopupData;
+                
+                const order = orders.find(o => o.id === material.orderId);
+                if (order) {
+                    const updated = order.materials.map(x => x.id === material.id ? { ...x, status: nextStatus } : x);
+                    await saveOrder({ ...order, materials: updated }, false);
+                }
+                setMaterialPopupData(null);
+            };
 
             const stats = useMemo(() => {
                 return {
@@ -1735,7 +1745,7 @@
                                     // 🌟 [수정] 취소 버튼 클릭 시 history.back() 호출
                                     window.history.back(); 
                                 }} isAdmin={isAdmin} currentUserId={user?.uid} />}
-                                {currentView === 'materials' && <MaterialManageView suppliers={suppliers} orders={orders} onUpdateOrder={saveOrder} />}
+                                {currentView === 'materials' && <MaterialManageView suppliers={suppliers} orders={orders} onUpdateOrder={saveOrder} onMaterialStatusClick={(m, next)=>setMaterialPopupData({material:m, nextStatus:next})} />}
                             </div>
                         </div>
 
@@ -1760,7 +1770,7 @@
                             </ModalOverlay>
                         )}
 
-                        {/* 🌟 상태 변경 최종 확인 팝업 */}
+                        {/* 🌟 상태 변경 최종 확인 팝업 (작업) */}
                         {pendingStatus && (
                             <ModalOverlay onClose={() => setPendingStatus(null)}>
                                 <div className="bg-white w-full max-w-xs rounded-xl shadow-2xl p-6 animate-fade-in text-center" onClick={e=>e.stopPropagation()}>
@@ -1775,6 +1785,26 @@
                                     <div className="flex gap-2">
                                         <button onClick={() => setPendingStatus(null)} className="flex-1 bg-gray-200 py-3 rounded-xl font-bold text-gray-600">취소</button>
                                         <button onClick={executeStatusChange} className="flex-1 bg-indigo-600 py-3 rounded-xl font-bold text-white shadow-lg">확인</button>
+                                    </div>
+                                </div>
+                            </ModalOverlay>
+                        )}
+
+                        {/* 🌟 [추가] 자재 상태 변경 확인 팝업 */}
+                        {materialPopupData && (
+                            <ModalOverlay onClose={() => setMaterialPopupData(null)}>
+                                <div className="bg-white w-full max-w-xs rounded-xl shadow-2xl p-6 animate-fade-in text-center" onClick={e=>e.stopPropagation()}>
+                                    <div className="mx-auto bg-yellow-100 w-12 h-12 rounded-full flex items-center justify-center mb-4 text-yellow-600">
+                                        <CheckCircle size={24} />
+                                    </div>
+                                    <h3 className="font-bold text-lg mb-2">자재 상태 변경</h3>
+                                    <p className="text-gray-500 text-sm mb-6">
+                                        '<span className="font-bold text-slate-800">{materialPopupData.material.item}</span>'의 상태를<br/>
+                                        <span className="font-bold text-indigo-600">{materialPopupData.material.status}</span>에서 <span className="font-bold text-indigo-600">{materialPopupData.nextStatus}</span>(으)로 변경할까요?
+                                    </p>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setMaterialPopupData(null)} className="flex-1 bg-gray-200 py-3 rounded-xl font-bold text-gray-600">취소</button>
+                                        <button onClick={executeMaterialStatusChange} className="flex-1 bg-indigo-600 py-3 rounded-xl font-bold text-white shadow-lg">확인</button>
                                     </div>
                                 </div>
                             </ModalOverlay>
