@@ -418,8 +418,6 @@
                             </Card>
                         </div>
 
-                        {/* AI Briefing 버튼 제거됨 */}
-
                         <div>
                             <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><FileText size={18}/> 최신 작업</h3>
                             <div className="grid gap-3">
@@ -603,6 +601,7 @@
 
             return (
                 <div className="h-full overflow-y-auto animate-fade-in pb-10 scroll-touch" onClick={()=>setShowSuggestions(false)}>
+                    {/* 🌟 onBack prop은 이제 history.back()을 호출하게 됨 */}
                     <div className="flex items-center gap-2 text-slate-500 cursor-pointer mb-4" onClick={onBack}>
                         <ChevronLeft size={20}/> <span className="text-sm font-bold">목록</span>
                     </div>
@@ -781,6 +780,7 @@
 
             return (
                 <div className="max-w-2xl mx-auto animate-fade-in pb-10 scroll-touch">
+                    {/* 🌟 onCancel prop은 이제 history.back()을 호출하게 됨 */}
                     <div onClick={onCancel} className="mb-4 cursor-pointer text-slate-500 font-bold">취소</div>
                     <Card className="p-6 space-y-4">
                         <h2 className="text-2xl font-bold">{order ? '수정' : '새 작업 등록'}</h2>
@@ -884,6 +884,7 @@
             );
         };
 
+        // (MaterialManageView 및 CalendarView는 변경 없음, 기존 코드 유지)
         const MaterialManageView = ({ suppliers, orders, onUpdateOrder }) => {
             const [selectedSupplier, setSelectedSupplier] = useState(null);
             const [isCustomMode, setIsCustomMode] = useState(false);
@@ -1364,7 +1365,6 @@
             };
 
             return (
-                // 🌟 min-h-0 추가하여 모바일에서 높이가 꽉 찼을 때 flex items가 찌그러지지 않고 스크롤되거나 조정되도록 함
                 <div className="h-full flex flex-col animate-fade-in pb-10 min-h-0">
                     <div className="flex justify-between items-center mb-4 flex-shrink-0">
                         <h2 className="text-2xl font-bold">{year}년 {month + 1}월</h2>
@@ -1374,12 +1374,10 @@
                         <button onClick={() => setDate(new Date(year, month + 1, 1))} className="p-1 hover:bg-slate-200 rounded"><ChevronRight /></button>
                         </div>
                     </div>
-                    {/* 🌟 min-h-0을 사용하여 내부 그리드가 부모 높이를 넘어가면 스크롤이 생기거나 조정되도록 함 */}
                     <div className="flex-1 bg-white border rounded-xl overflow-hidden flex flex-col shadow-sm min-h-0">
                         <div className="grid grid-cols-7 bg-slate-50 border-b text-center py-2 font-bold text-slate-600 text-sm flex-shrink-0">
                         <div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div className="text-blue-500">토</div><div className="text-red-500">일</div>
                         </div>
-                        {/* 🌟 overflow-y-auto 추가하여 내용이 많을 때 스크롤 가능하게 함 */}
                         <div className="flex-1 grid grid-cols-7 grid-rows-5 overflow-y-auto">
                         {days.map((d, i) => {
                             if (!d) return <div key={i} className="bg-slate-50 border-r border-b"></div>;
@@ -1433,9 +1431,22 @@
             const [urgentCount, setUrgentCount] = useState(0);
             const [showAlertPopup, setShowAlertPopup] = useState(false);
 
-            // 🌟 상태 변경 팝업 관련 상태
             const [statusPopupOrder, setStatusPopupOrder] = useState(null);
-            const [pendingStatus, setPendingStatus] = useState(null); // 변경하려고 선택한 상태
+            const [pendingStatus, setPendingStatus] = useState(null);
+
+            // 🌟 [추가] 브라우저/모바일 뒤로가기 버튼 핸들링
+            useEffect(() => {
+                const handlePopState = (e) => {
+                    // 뒤로가기 발생 시, 현재 상세페이지나 폼이라면 목록으로 돌아가도록 처리
+                    if (currentView === 'detail' || currentView === 'form') {
+                        setSelectedOrder(null);
+                        setCurrentView('list');
+                    }
+                };
+
+                window.addEventListener('popstate', handlePopState);
+                return () => window.removeEventListener('popstate', handlePopState);
+            }, [currentView]);
 
             // Firebase Initialization
             const { auth, db, appId } = useMemo(() => {
@@ -1571,7 +1582,6 @@
                 }
             };
             
-            // 🌟 상태 변경 실행 (확인 팝업 후)
             const executeStatusChange = async () => {
                 if(!statusPopupOrder || !pendingStatus) return;
                 
@@ -1580,7 +1590,7 @@
                     newData.completedDate = new Date().toISOString().split('T')[0];
                 }
                 
-                await saveOrder(newData, false); // 화면 이동 없이 저장
+                await saveOrder(newData, false); 
                 setPendingStatus(null);
                 setStatusPopupOrder(null);
             };
@@ -1604,14 +1614,14 @@
             }, [orders]);
 
             const handleNavigate = (order) => {
+                // 🌟 [수정] 상세 페이지로 이동 시 브라우저 히스토리 추가
+                window.history.pushState({ page: 'detail' }, '', '');
                 setSelectedOrder(order);
                 setCurrentView('detail');
                 setShowAlertPopup(false);
             };
             
-            // 🌟 최근 업데이트된 항목 가져오기 (알림용)
             const recentUpdates = useMemo(() => {
-                // updatedAt이 있는 항목을 우선으로, 없으면 createdAt으로 정렬
                 return [...orders].sort((a, b) => {
                     const tA = a.updatedAt ? a.updatedAt.seconds : (a.createdAt ? a.createdAt.seconds : 0);
                     const tB = b.updatedAt ? b.updatedAt.seconds : (b.createdAt ? b.createdAt.seconds : 0);
@@ -1670,7 +1680,6 @@
                             <div className="relative">
                                 <button onClick={()=>setShowAlertPopup(!showAlertPopup)} className="p-2 hover:bg-slate-100 rounded-full relative">
                                     <Bell className="text-slate-600" />
-                                    {/* 최근 24시간 내 업데이트가 있으면 빨간점 표시 (여기선 간단히 recentUpdates length로 대체) */}
                                     <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
                                 </button>
                                 {showAlertPopup && (
@@ -1697,9 +1706,35 @@
                             <div className={`max-w-5xl mx-auto ${['calendar', 'materials', 'detail'].includes(currentView) ? 'h-full' : ''}`}>
                                 {currentView === 'dashboard' && <Dashboard orders={orders} stats={stats} suppliers={suppliers} onNavigate={handleNavigate} onStatusClick={setStatusPopupOrder} isAdmin={isAdmin} currentUserId={user?.uid} />}
                                 {currentView === 'calendar' && <CalendarView orders={orders} onSelect={handleNavigate} />}
-                                {currentView === 'list' && !selectedOrder && <ListView orders={orders} onSelect={handleNavigate} onAdd={() => { setSelectedOrder(null); setCurrentView('form'); }} onStatusClick={setStatusPopupOrder} />}
-                                {currentView === 'detail' && <DetailView order={selectedOrder} onBack={() => { setSelectedOrder(null); setCurrentView('list'); }} onUpdate={(data, view, navigate) => { if(view) setCurrentView(view); else saveOrder(data, navigate); }} isAdmin={isAdmin} currentUserId={user?.uid} onStatusClick={setStatusPopupOrder} />}
-                                {currentView === 'form' && <FormView order={selectedOrder} onSave={(data) => saveOrder(data, true)} onDelete={deleteOrder} onCancel={() => { setSelectedOrder(null); setCurrentView('list'); }} isAdmin={isAdmin} currentUserId={user?.uid} />}
+                                {currentView === 'list' && !selectedOrder && <ListView orders={orders} onSelect={handleNavigate} onAdd={() => { 
+                                    // 🌟 [수정] 작업 등록 화면으로 이동 시 히스토리 추가
+                                    window.history.pushState({ page: 'form' }, '', '');
+                                    setSelectedOrder(null); 
+                                    setCurrentView('form'); 
+                                }} onStatusClick={setStatusPopupOrder} />}
+                                {currentView === 'detail' && <DetailView order={selectedOrder} onBack={() => { 
+                                    // 🌟 [수정] 뒤로가기 버튼 클릭 시 history.back() 호출
+                                    window.history.back(); 
+                                }} onUpdate={(data, view, navigate) => { 
+                                    if(view) {
+                                        // 수정 화면으로 갈 때도 히스토리 추가
+                                        window.history.pushState({ page: 'form' }, '', '');
+                                        setCurrentView(view);
+                                    } else {
+                                        saveOrder(data, navigate);
+                                    }
+                                }} isAdmin={isAdmin} currentUserId={user?.uid} onStatusClick={setStatusPopupOrder} />}
+                                {currentView === 'form' && <FormView order={selectedOrder} onSave={(data) => {
+                                    // 저장 후 뒤로가기 (history.back으로 처리하여 목록 복귀)
+                                    saveOrder(data, false); 
+                                    window.history.back();
+                                }} onDelete={async (id) => {
+                                    await deleteOrder(id);
+                                    window.history.back();
+                                }} onCancel={() => { 
+                                    // 🌟 [수정] 취소 버튼 클릭 시 history.back() 호출
+                                    window.history.back(); 
+                                }} isAdmin={isAdmin} currentUserId={user?.uid} />}
                                 {currentView === 'materials' && <MaterialManageView suppliers={suppliers} orders={orders} onUpdateOrder={saveOrder} />}
                             </div>
                         </div>
