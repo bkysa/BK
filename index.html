@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>숨쉬는 깡통</title>
     
+    <!-- 🌟 홈 화면 아이콘 설정 (BK 로고) -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%230f172a'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='250' font-family='sans-serif' font-weight='bold' dy='.1em'%3EBK%3C/text%3E%3C/svg%3E">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%230f172a'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='250' font-family='sans-serif' font-weight='bold' dy='.1em'%3EBK%3C/text%3E%3C/svg%3E">
+
     <!-- 1. Tailwind CSS (Design) -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -699,7 +703,7 @@
                 deliveryAddress: '', 
                 orderDate: new Date().toISOString().split('T')[0], 
                 deliveryDate: '', 
-                completedDate: '', // 초기값 설정
+                completedDate: '', 
                 status: '설계중', description: '', clientContact: '', files: []
             });
             const fileInputRef = useRef(null);
@@ -1663,11 +1667,7 @@
                                         window.history.pushState({ page: 'form' }, '', '');
                                         setCurrentView(view);
                                     } else {
-                                        // navigate가 false면 그냥 저장만 함 (shouldNavigate 삭제됨)
-                                        // 하지만 기존 detail view에서의 로직 유지를 위해 navigate 파라미터는 무시하고
-                                        // saveOrder만 호출하면 됨.
                                         saveOrder(data);
-                                        // detailView에서는 화면 이동 없음 (이미 detail view)
                                     }
                                 }} isAdmin={isAdmin} currentUserId={user?.uid} onStatusClick={setStatusPopupOrder} />}
                                 {currentView === 'form' && <FormView order={selectedOrder} onSave={(data) => {
