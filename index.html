@@ -72,7 +72,7 @@
             LayoutDashboard, Plus, FileText, Calendar as CalendarIcon,
             Package, ChevronRight, ChevronLeft, Trash2, Edit3, Download,
             ChevronDown, ChevronUp, Wifi, ArrowRight, Phone, MapPin, Bell, X, Truck, 
-            Search, AlertCircle, Sparkles, Paperclip, File, Lock, Key, User, HardHat, MinusCircle, Save, CheckCircle
+            Search, AlertCircle, Sparkles, Paperclip, File, Lock, Key, User, HardHat, MinusCircle, Save, CheckCircle, Navigation
         } from 'lucide-react';
 
         // --- Firebase Imports ---
@@ -194,6 +194,7 @@
         const MaterialStatusBadge = ({ status, onClick }) => {
             const colors = {
                 '발주': 'bg-yellow-100 text-yellow-700',
+                '접수': 'bg-orange-100 text-orange-700', 
                 '회수대기': 'bg-red-100 text-red-700 font-bold animate-pulse cursor-pointer',
                 '회수완료': 'bg-gray-200 text-gray-500',
                 '정보': 'bg-slate-100 text-slate-500 border border-slate-200', 
@@ -268,14 +269,15 @@
 
         // --- Components ---
 
-        const Dashboard = ({ orders, stats, suppliers, onNavigate, onStatusClick }) => {
+        const Dashboard = ({ orders, stats, suppliers, onNavigate, onStatusClick, onMaterialStatusClick }) => {
             const [activeStat, setActiveStat] = useState(null);
             const [activeRoutePopup, setActiveRoutePopup] = useState(null);
 
             // 동선 최적화
             const optimizedRoute = useMemo(() => {
+                // 🌟 [수정] 동선 포함 조건에 '접수' 상태 추가!
                 const pickupTargets = Object.keys(suppliers).filter(name => 
-                    suppliers[name].some(m => m.status === '회수대기')
+                    suppliers[name].some(m => ['회수대기', '접수'].includes(m.status))
                 );
 
                 if (pickupTargets.length === 0) return [];
@@ -296,7 +298,8 @@
                         lat,
                         lng,
                         address,
-                        count: materials.filter(m => m.status === '회수대기').length
+                        // 🌟 [수정] 카운트도 '회수대기'와 '접수' 모두 포함
+                        count: materials.filter(m => ['회수대기', '접수'].includes(m.status)).length
                     };
                 });
 
@@ -470,13 +473,22 @@
                                 <h3 className="font-bold text-lg mb-2">{activeRoutePopup.name}</h3>
                                 <div className="text-sm text-gray-500 mb-4">{activeRoutePopup.address}</div>
                                 <div className="space-y-2 mb-4">
-                                    {(suppliers[activeRoutePopup.name] || []).filter(m=>m.status==='회수대기').map((item, i)=>(
-                                        <div key={i} className="bg-slate-50 p-2 rounded text-sm flex justify-between">
-                                            <span>{item.item}</span><span className="font-bold">{item.quantity}</span>
+                                    {/* 🌟 [수정] 회수대기 뿐만 아니라 접수 건도 함께 표시 */}
+                                    {(suppliers[activeRoutePopup.name] || []).filter(m=>['회수대기', '접수'].includes(m.status)).map((item, i)=>(
+                                        <div key={i} className="bg-slate-50 p-2 rounded text-sm flex justify-between items-center">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded text-white ${item.status === '접수' ? 'bg-orange-500' : 'bg-indigo-500'}`}>{item.status}</span>
+                                                <span>{item.item}</span>
+                                            </div>
+                                            <span className="font-bold">{item.quantity}</span>
                                         </div>
                                     ))}
                                 </div>
-                                <a href={`https://map.naver.com/p/search/${activeRoutePopup.address}`} target="_blank" className="block w-full bg-indigo-600 text-white text-center py-3 rounded font-bold">지도 열기</a>
+                                {/* 🌟 네이버 지도 연결 버튼 추가 */}
+                                <a href={`https://map.naver.com/p/search/${activeRoutePopup.address}`} target="_blank" className="w-full bg-[#03C75A] text-white flex items-center justify-center gap-2 py-3 rounded font-bold mb-2 hover:opacity-90">
+                                    <Navigation size={18}/> 네이버 지도 보기
+                                </a>
+                                <button onClick={()=>setActiveRoutePopup(null)} className="w-full bg-slate-100 text-slate-600 py-3 rounded font-bold">닫기</button>
                             </div>
                         </ModalOverlay>
                     )}
@@ -543,7 +555,7 @@
             );
         };
 
-        const DetailView = ({ order, onBack, onUpdate, isAdmin, currentUserId, onStatusClick }) => {
+        const DetailView = ({ order, onBack, onUpdate, isAdmin, currentUserId, onStatusClick, onMaterialStatusClick }) => {
             if (!order) return null;
             const canEdit = isAdmin || order.userId === currentUserId;
             const [mat, setMat] = useState({ supplier: '', item: '', quantity: '', status: '발주', date: new Date().toISOString().split('T')[0] });
@@ -566,6 +578,7 @@
 
             return (
                 <div className="h-full overflow-y-auto animate-fade-in pb-10 scroll-touch" onClick={()=>setShowSuggestions(false)}>
+                    {/* 🌟 onBack prop은 이제 history.back()을 호출하게 됨 */}
                     <div className="flex items-center gap-2 text-slate-500 cursor-pointer mb-4" onClick={onBack}>
                         <ChevronLeft size={20}/> <span className="text-sm font-bold">목록</span>
                     </div>
@@ -639,7 +652,7 @@
                     </div>
 
                     <h3 className="font-bold mb-2 flex items-center gap-2"><Package size={18}/> 자재 발주 내역</h3>
-                    <p className="text-xs text-gray-500 mb-2">* 상태를 클릭하면 발주/회수대기/회수완료 순으로 변경됩니다.</p>
+                    <p className="text-xs text-gray-500 mb-2">* 상태를 클릭하면 변경할 수 있습니다.</p>
                     <Card className="p-0 overflow-hidden mb-10">
                         <table className="w-full text-sm text-left">
                             <thead className="bg-slate-50 border-b"><tr><th className="p-2">거래처</th><th className="p-2">품목</th><th className="p-2">상태</th></tr></thead>
@@ -649,7 +662,7 @@
                                         <td className="p-2 font-bold">{m.supplier}</td>
                                         <td className="p-2">{m.item} ({m.quantity})</td>
                                         <td className="p-2">
-                                            <MaterialStatusBadge status={m.status} onClick={() => handleStatusClick(m)} />
+                                            <MaterialStatusBadge status={m.status} onClick={() => onMaterialStatusClick(m, m.status)} />
                                         </td>
                                     </tr>
                                 ))}
@@ -683,10 +696,19 @@
                                     <input placeholder="품목명" className="border p-2 rounded flex-1 text-sm min-w-0 w-full" value={mat.item} onChange={e => setMat({ ...mat, item: e.target.value })} />
                                     <input placeholder="수량" className="border p-2 rounded w-full md:w-20 text-sm" value={mat.quantity} onChange={e => setMat({ ...mat, quantity: e.target.value })} />
                                 </div>
+                                {/* 🌟 자재 등록 시 초기 상태 선택 (발주 vs 접수) */}
+                                <div className="flex gap-4 mb-2 text-xs">
+                                    <label className="flex items-center gap-1 cursor-pointer">
+                                        <input type="radio" name="matStatus" checked={mat.status === '발주'} onChange={()=>setMat({...mat, status:'발주'})} /> 구매 (발주)
+                                    </label>
+                                    <label className="flex items-center gap-1 cursor-pointer">
+                                        <input type="radio" name="matStatus" checked={mat.status === '접수'} onChange={()=>setMat({...mat, status:'접수'})} /> 가공 (접수)
+                                    </label>
+                                </div>
                                 <button onClick={()=>{
                                     if(!mat.supplier || !mat.item) return;
                                     onUpdate({ materials: [...(order.materials||[]), {...mat, id:Date.now()}] }, null, false);
-                                    setMat({...mat, supplier:'', item:'', quantity:''});
+                                    setMat({...mat, supplier:'', item:'', quantity:'', status:'발주'});
                                     setShowSuggestions(false);
                                 }} className="bg-slate-800 text-white px-4 py-2 rounded text-sm font-bold w-full">추가</button>
                             </div>
@@ -852,6 +874,9 @@
             });
             const [batchItems, setBatchItems] = useState([{ id: Date.now(), item: '', quantity: '' }]);
             
+            // 🌟 퀵애드용 상태 추가 (기본값: 발주)
+            const [quickAddType, setQuickAddType] = useState('발주');
+
             const [newSupplierInfo, setNewSupplierInfo] = useState({ phone: '', email: '', address: '' });
 
             useEffect(() => { 
@@ -899,9 +924,9 @@
             const sortedSuppliers = useMemo(() => {
                 const list = Object.keys(suppliers).map(name => {
                     const items = suppliers[name];
-                    const hasActive = items.some(m => ['발주', '회수대기', '작업중'].includes(m.status));
+                    const hasActive = items.some(m => ['발주', '접수', '회수대기', '작업중'].includes(m.status));
                     const pickupCnt = items.filter(m => m.status === '회수대기').length;
-                    const activeCnt = items.filter(m => m.status === '발주').length;
+                    const activeCnt = items.filter(m => ['발주', '접수'].includes(m.status)).length;
                     return { name, hasActive, pickupCnt, activeCnt, items };
                 });
 
@@ -975,7 +1000,7 @@
                             supplier: finalSupplier, 
                             item: itemData.item,
                             quantity: itemData.quantity, 
-                            status: "발주", 
+                            status: quickAddType,  // 🌟 선택한 타입(발주/접수) 사용
                             date: batchHeader.date
                         };
                         
@@ -996,7 +1021,7 @@
                 setBatchItems([{ id: Date.now(), item: '', quantity: '' }]);
                 setNewSupplierInfo({ phone: '', email: '', address: '' });
                 if(isCustomMode) setSelectedSupplier(null); 
-                alert(isInfoRegistration ? "거래처 정보가 등록되었습니다!" : `${newMaterials.length}건의 발주가 등록되었습니다!`);
+                alert(isInfoRegistration ? "거래처 정보가 등록되었습니다!" : `${newMaterials.length}건의 ${quickAddType}가 등록되었습니다!`);
             };
 
             const handleSaveInfo = async () => {
@@ -1068,8 +1093,8 @@
 
             const toggleStatus = async (m) => {
                 if (m.status === '정보') return;
-                const nextStatus = cycleMaterialStatus(m.status);
-                onMaterialStatusClick(m, nextStatus);
+                // 🌟 상태 팝업 호출 (수정된 App에서 처리)
+                onMaterialStatusClick(m, m.status);
             };
 
             const handleDelete = async (m) => {
@@ -1083,12 +1108,39 @@
 
             const handleEditSave = async () => {
                 if (!editingMaterial) return;
-                const order = orders.find(o => o.id === editingMaterial.orderId);
-                if(order) {
-                    const updated = order.materials.map(x => x.id === editingMaterial.id ? { ...x, ...editingMaterial } : x);
-                    await onUpdateOrder({ ...order, materials: updated }, false);
-                    setEditingMaterial(null);
+                
+                // 🌟 프로젝트 이동 로직
+                // 1. 원래 소속된 주문 찾기 (original order ID)
+                const originalOrderId = editingMaterial.orderId; // editingMaterial has the ID from the list view data
+                // 2. 현재 선택된 주문 (new order ID from input)
+                const newOrderId = editingMaterial.newOrderId || originalOrderId; // If newOrderId is set, use it. Else use original.
+
+                if (originalOrderId === newOrderId) {
+                    // Same project update
+                    const order = orders.find(o => o.id === originalOrderId);
+                    if(order) {
+                        // Remove extra fields before saving
+                        const { orderId, orderName, newOrderId, ...cleanMaterial } = editingMaterial;
+                        const updated = order.materials.map(x => x.id === cleanMaterial.id ? cleanMaterial : x);
+                        await onUpdateOrder({ ...order, materials: updated }, false);
+                    }
+                } else {
+                    // Move to different project
+                    const oldOrder = orders.find(o => o.id === originalOrderId);
+                    const newOrder = orders.find(o => o.id === newOrderId);
+                    
+                    if (oldOrder && newOrder) {
+                        // Remove from old
+                        const { orderId, orderName, newOrderId, ...cleanMaterial } = editingMaterial;
+                        const oldMaterials = oldOrder.materials.filter(x => x.id !== cleanMaterial.id);
+                        await onUpdateOrder({ ...oldOrder, materials: oldMaterials }, false);
+                        
+                        // Add to new
+                        const newMaterials = [...(newOrder.materials || []), cleanMaterial];
+                        await onUpdateOrder({ ...newOrder, materials: newMaterials }, false);
+                    }
                 }
+                setEditingMaterial(null);
             };
 
             return (
@@ -1098,6 +1150,22 @@
                         <Card className="w-full max-w-sm p-4 shadow-xl border-indigo-200 bg-white" onClick={e=>e.stopPropagation()}>
                             <h3 className="font-bold text-lg mb-3 flex items-center gap-2"><Edit3 size={18}/> 자재 수정</h3>
                             <div className="space-y-3">
+                                <div>
+                                    <label className="text-xs text-gray-500 font-bold">프로젝트 (작업)</label>
+                                    <select 
+                                        className="w-full border p-2 rounded text-sm bg-white" 
+                                        value={editingMaterial.newOrderId || editingMaterial.orderId} 
+                                        onChange={e => setEditingMaterial({...editingMaterial, newOrderId: e.target.value})}
+                                    >
+                                        {orders.filter(o => !['납품완료'].includes(o.status)).map(o => (
+                                            <option key={o.id} value={o.id}>{o.itemName}</option>
+                                        ))}
+                                        {/* 완료된 프로젝트도 현재 포함되어 있다면 보여줌 */}
+                                        {orders.find(o => o.id === editingMaterial.orderId && ['납품완료'].includes(o.status)) && (
+                                            <option value={editingMaterial.orderId}>{editingMaterial.orderName} (완료됨)</option>
+                                        )}
+                                    </select>
+                                </div>
                                 <div>
                                     <label className="text-xs text-gray-500 font-bold">발주일</label>
                                     <input type="date" className="w-full border p-2 rounded text-sm" value={editingMaterial.date || ''} onChange={e => setEditingMaterial({...editingMaterial, date: e.target.value})}/>
@@ -1140,7 +1208,7 @@
                                 <span className="font-bold">{s.name}</span>
                                 {s.pickupCnt > 0 && <span className="bg-indigo-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold animate-pulse">회수 {s.pickupCnt}</span>}
                             </div>
-                            <div className="text-xs opacity-70">발주중 {s.activeCnt}건 / 총 {s.items.length}건</div>
+                            <div className="text-xs opacity-70">진행중 {s.activeCnt}건 / 총 {s.items.length}건</div>
                             </div>
                         )
                         })}
@@ -1209,6 +1277,18 @@
                                     </select>
                                 </div>
                                 
+                                {/* 🌟 퀵애드 타입 선택 (발주/접수) */}
+                                <div className="flex gap-4 text-sm p-1">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="quickAddType" checked={quickAddType === '발주'} onChange={()=>setQuickAddType('발주')} className="accent-indigo-600"/>
+                                        <span>구매 (발주)</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="quickAddType" checked={quickAddType === '접수'} onChange={()=>setQuickAddType('접수')} className="accent-orange-600"/>
+                                        <span>가공 (접수)</span>
+                                    </label>
+                                </div>
+
                                 <div className="space-y-2">
                                     {batchItems.map((row, index) => (
                                         <div key={row.id} className="flex gap-2 items-center animate-fade-in">
@@ -1236,7 +1316,7 @@
                                     <Plus size={14}/> 품목 추가하기
                                 </button>
                             </div>
-                            <button onClick={handleBatchAdd} className="w-full bg-indigo-600 text-white py-2 rounded text-sm font-bold hover:bg-indigo-700">
+                            <button onClick={handleBatchAdd} className={`w-full text-white py-2 rounded text-sm font-bold ${quickAddType==='발주' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-orange-500 hover:bg-orange-600'}`}>
                                 {isCustomMode && batchItems.every(i => !i.item) ? "거래처 정보만 등록" : "일괄 등록하기"}
                             </button>
                             </div>
@@ -1724,21 +1804,33 @@
                             </ModalOverlay>
                         )}
 
-                        {/* 🌟 [추가] 자재 상태 변경 확인 팝업 */}
+                        {/* 🌟 [추가] 자재 상태 변경 확인 팝업 (선택형으로 수정) */}
                         {materialPopupData && (
                             <ModalOverlay onClose={() => setMaterialPopupData(null)}>
                                 <div className="bg-white w-full max-w-xs rounded-xl shadow-2xl p-6 animate-fade-in text-center" onClick={e=>e.stopPropagation()}>
-                                    <div className="mx-auto bg-yellow-100 w-12 h-12 rounded-full flex items-center justify-center mb-4 text-yellow-600">
-                                        <CheckCircle size={24} />
+                                    <h3 className="font-bold text-lg mb-4">자재 상태 변경</h3>
+                                    <div className="grid grid-cols-2 gap-2 mb-4">
+                                        {['발주', '접수', '회수대기', '회수완료'].map((status) => (
+                                            <button
+                                                key={status}
+                                                onClick={() => setMaterialPopupData({ ...materialPopupData, nextStatus: status })}
+                                                className={`py-2 rounded text-xs font-bold border transition-all ${
+                                                    materialPopupData.nextStatus === status
+                                                        ? 'bg-indigo-600 text-white border-indigo-600'
+                                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                {status}
+                                            </button>
+                                        ))}
                                     </div>
-                                    <h3 className="font-bold text-lg mb-2">자재 상태 변경</h3>
-                                    <p className="text-gray-500 text-sm mb-6">
-                                        '<span className="font-bold text-slate-800">{materialPopupData.material.item}</span>'의 상태를<br/>
-                                        <span className="font-bold text-indigo-600">{materialPopupData.material.status}</span>에서 <span className="font-bold text-indigo-600">{materialPopupData.nextStatus}</span>(으)로 변경할까요?
+                                    <p className="text-gray-500 text-xs mb-4">
+                                        현재: <span className="font-bold">{materialPopupData.material.status}</span> → 
+                                        변경: <span className="font-bold text-indigo-600">{materialPopupData.nextStatus}</span>
                                     </p>
                                     <div className="flex gap-2">
-                                        <button onClick={() => setMaterialPopupData(null)} className="flex-1 bg-gray-200 py-3 rounded-xl font-bold text-gray-600">취소</button>
-                                        <button onClick={executeMaterialStatusChange} className="flex-1 bg-indigo-600 py-3 rounded-xl font-bold text-white shadow-lg">확인</button>
+                                        <button onClick={() => setMaterialPopupData(null)} className="flex-1 bg-gray-200 py-2 rounded font-bold text-gray-600 text-xs">취소</button>
+                                        <button onClick={executeMaterialStatusChange} className="flex-1 bg-indigo-600 py-2 rounded font-bold text-white shadow-lg text-xs">변경하기</button>
                                     </div>
                                 </div>
                             </ModalOverlay>
