@@ -72,7 +72,8 @@
             LayoutDashboard, Plus, FileText, Calendar as CalendarIcon,
             Package, ChevronRight, ChevronLeft, Trash2, Edit3, Download,
             ChevronDown, ChevronUp, Wifi, ArrowRight, Phone, MapPin, Bell, X, Truck, 
-            Search, AlertCircle, Sparkles, Paperclip, File, Lock, Key, User, HardHat, MinusCircle, Save, CheckCircle, Navigation
+            Search, AlertCircle, Sparkles, Paperclip, File, Lock, Key, User, HardHat, 
+            MinusCircle, Save, CheckCircle, Navigation, History, ShieldAlert
         } from 'lucide-react';
 
         // --- Firebase Imports ---
@@ -80,7 +81,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
         import {
             getFirestore, collection, addDoc, updateDoc, deleteDoc,
-            doc, onSnapshot, query, orderBy, serverTimestamp
+            doc, onSnapshot, query, orderBy, serverTimestamp, limit
         } from 'firebase/firestore';
 
         // ---------------------------------------------------------
@@ -95,11 +96,6 @@
             appId: "1:16230700058:web:833a3d16f54cdd73d2ada3",
             measurementId: "G-PMGKK5F8CP"
         };
-
-        // ---------------------------------------------------------
-        // ✅ Gemini API 키
-        // ---------------------------------------------------------
-        const GEMINI_API_KEY = "AIzaSyAAuopjonzUutbkTZXv5PbqfKz2hDsNRes";
 
         // --- Constants & Mock Data ---
         const COMPANY_INFO = {
@@ -148,17 +144,14 @@
             return { lat: 37.54 + (Math.random() * 0.05), lng: 127.05 + (Math.random() * 0.05) };
         };
 
-        // --- Helper Functions ---
-        const cycleMaterialStatus = (currentStatus) => {
-            if (currentStatus === '발주') return '배차';
-            if (currentStatus === '배차') return '회수대기';
-            if (currentStatus === '회수대기') return '회수완료';
-            return '발주';
+        const formatTime = (timestamp) => {
+            if (!timestamp) return '-';
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            return `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
         };
 
         // --- Helper Components ---
         
-        // 🌟 Portal Component for Modals
         const ModalOverlay = ({ children, onClose }) => {
             return createPortal(
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={onClose}>
@@ -168,17 +161,17 @@
             );
         };
 
-        // 🌟 StatusBadge
+        // 🌟 StatusBadge 수정: 작업완료 추가
         const StatusBadge = ({ status, onClick }) => {
             const colors = {
                 '설계중': 'bg-gray-100 text-gray-600 border border-gray-300',
                 '작업중': 'bg-blue-100 text-blue-700 border border-blue-200',
+                '작업완료': 'bg-green-100 text-green-700 border border-green-200 font-bold',
                 '도장/마감중': 'bg-purple-100 text-purple-700 border border-purple-200',
                 '납품대기': 'bg-teal-100 text-teal-700 border border-teal-200 font-bold animate-pulse',
                 '납품완료': 'bg-slate-200 text-slate-500 line-through border border-slate-300',
                 // Legacy
                 '대기': 'bg-gray-100 text-gray-600',
-                '작업완료': 'bg-teal-100 text-teal-700',
             };
             
             return (
@@ -275,13 +268,12 @@
 
         // --- Components ---
 
-        const Dashboard = ({ orders, stats, suppliers, onNavigate, onStatusClick, onMaterialStatusClick }) => {
+        const Dashboard = ({ orders, stats, suppliers, onNavigate, onStatusClick }) => {
             const [activeStat, setActiveStat] = useState(null);
             const [activeRoutePopup, setActiveRoutePopup] = useState(null);
 
             // 동선 최적화
             const optimizedRoute = useMemo(() => {
-                // 🌟 배차는 제외하고 회수대기/접수만 포함
                 const pickupTargets = Object.keys(suppliers).filter(name => 
                     suppliers[name].some(m => ['회수대기', '접수'].includes(m.status))
                 );
@@ -344,24 +336,24 @@
                     return list;
                 }
                 
-                // 우선순위 정의
+                // 🌟 우선순위 정의 (수정됨: 작업완료 추가)
                 const priority = {
                     '작업중': 1,
-                    '도장/마감중': 2,
-                    '납품대기': 3,
-                    '설계중': 4
+                    '작업완료': 2,
+                    '도장/마감중': 3,
+                    '납품대기': 4,
+                    '설계중': 5
                 };
 
                 return orders
                     .filter(o => {
                         if (activeStat === 'ongoing') {
-                            return !['납품완료', '작업완료'].includes(o.status) && o.itemName !== '기타 자재 발주';
+                            return !['납품완료'].includes(o.status) && o.itemName !== '기타 자재 발주';
                         }
                         if (activeStat === 'urgent') {
                             if (!o.deliveryDate || ['납품완료', '작업완료'].includes(o.status)) return false;
                             return Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2;
                         }
-                        // 🌟 납품 대기 필터
                         if (activeStat === 'pendingDelivery') {
                             return o.status === '납품대기';
                         }
@@ -395,7 +387,6 @@
                                 <div className="text-xs text-gray-500">마감 임박</div>
                                 <div className="text-2xl font-bold text-red-600">{stats.urgent}건</div>
                             </Card>
-                            {/* 🌟 변경: 최근 완료 -> 납품 대기 */}
                             <Card className="p-4 border-l-4 border-teal-500 cursor-pointer hover:bg-teal-50" onClick={()=>setActiveStat('pendingDelivery')}>
                                 <div className="text-xs text-gray-500">납품 대기</div>
                                 <div className="text-2xl font-bold text-teal-600">{stats.pendingDelivery}건</div>
@@ -497,7 +488,6 @@
             );
         };
 
-        // ... (ListView, DetailView, FormView code similar as before, minimal changes) ...
         // ListView component
         const ListView = ({ orders, onSelect, onAdd, onStatusClick }) => {
             const [searchTerm, setSearchTerm] = useState('');
@@ -509,7 +499,8 @@
                 .filter(o => o.itemName !== '기타 자재 발주') 
                 .forEach(o => {
                     if (['설계중', '대기'].includes(o.status)) groups.design.push(o);
-                    else if (['작업중', '도장/마감중'].includes(o.status)) groups.prod.push(o);
+                    // 🌟 작업완료도 제작/마감 단계에 포함
+                    else if (['작업중', '작업완료', '도장/마감중'].includes(o.status)) groups.prod.push(o);
                     else groups.done.push(o);
                 });
 
@@ -568,8 +559,8 @@
             const supplierOptions = Object.keys(BASE_SUPPLIER_INFO);
             const filteredSuppliers = supplierOptions.filter(s => s.includes(mat.supplier));
 
-            const updateOrder = (newData) => {
-                onUpdate({ ...order, ...newData });
+            const updateOrder = (newData, logMessage = null) => {
+                onUpdate({ ...order, ...newData }, null, false, logMessage);
             };
 
             return (
@@ -691,7 +682,6 @@
                                     <input placeholder="품목명" className="border p-2 rounded flex-1 text-sm min-w-0 w-full" value={mat.item} onChange={e => setMat({ ...mat, item: e.target.value })} />
                                     <input placeholder="수량" className="border p-2 rounded w-full md:w-20 text-sm" value={mat.quantity} onChange={e => setMat({ ...mat, quantity: e.target.value })} />
                                 </div>
-                                {/* 🌟 자재 등록 시 초기 상태 선택 (발주 vs 접수) */}
                                 <div className="flex gap-4 mb-2 text-xs">
                                     <label className="flex items-center gap-1 cursor-pointer">
                                         <input type="radio" name="matStatus" checked={mat.status === '발주'} onChange={()=>setMat({...mat, status:'발주'})} /> 구매 (발주)
@@ -702,7 +692,8 @@
                                 </div>
                                 <button onClick={()=>{
                                     if(!mat.supplier || !mat.item) return;
-                                    onUpdate({ materials: [...(order.materials||[]), {...mat, id:Date.now()}] }, null, false);
+                                    // 🌟 자재 추가 시 로그
+                                    updateOrder({ materials: [...(order.materials||[]), {...mat, id:Date.now()}] }, { type: 'material', msg: `${mat.item} 자재 추가 (${mat.supplier})` });
                                     setMat({...mat, supplier:'', item:'', quantity:'', status:'발주'});
                                     setShowSuggestions(false);
                                 }} className="bg-slate-800 text-white px-4 py-2 rounded text-sm font-bold w-full">추가</button>
@@ -744,6 +735,18 @@
 
             const removeFile = (fileId) => {
                 setData(prev => ({ ...prev, files: prev.files.filter(f => f.id !== fileId) }));
+            };
+
+            const handleSave = () => {
+                let logInfo = null;
+                // 🌟 로그 정보 생성
+                if (!order) {
+                    logInfo = { type: 'create', msg: `신규 작업 등록: ${data.itemName}` };
+                } else if (order.status !== data.status) {
+                    logInfo = { type: 'status', msg: `작업 상태 변경: ${order.status} → ${data.status}` };
+                }
+
+                onSave(data, logInfo);
             };
 
             if (!canEdit) return <div className="p-10 text-center">수정 권한이 없습니다.<button onClick={onCancel} className="block mx-auto mt-4 bg-gray-200 px-4 py-2 rounded">돌아가기</button></div>;
@@ -802,6 +805,8 @@
                                 <select className="border p-2 rounded w-full" value={data.status} onChange={e=>setData({...data, status:e.target.value})}>
                                     <option>설계중</option>
                                     <option>작업중</option>
+                                    {/* 🌟 작업완료 상태 추가 */}
+                                    <option>작업완료</option>
                                     <option>도장/마감중</option>
                                     <option>납품대기</option>
                                     <option>납품완료</option>
@@ -845,7 +850,7 @@
                         </div>
                         <div className="flex justify-end gap-2 pt-4 border-t">
                             {order && <button onClick={()=>onDelete(order.id)} className="text-red-500 text-sm font-bold px-4">삭제</button>}
-                            <button onClick={()=>onSave(data)} className="bg-slate-800 text-white px-6 py-2 rounded font-bold">저장</button>
+                            <button onClick={handleSave} className="bg-slate-800 text-white px-6 py-2 rounded font-bold">저장</button>
                         </div>
                     </Card>
                 </div>
@@ -1008,7 +1013,11 @@
                 }
 
                 const updatedMaterials = [...(targetOrder.materials || []), ...newMaterials];
-                await onUpdateOrder({ ...targetOrder, materials: updatedMaterials }, false);
+                
+                // 🌟 로그 추가: 자재 일괄 등록
+                const logMsg = isInfoRegistration ? null : { type: 'material', msg: `${quickAddType} 일괄 등록 (${validItems.length}건) - ${finalSupplier}` };
+                
+                await onUpdateOrder({ ...targetOrder, materials: updatedMaterials }, logMsg);
                 
                 setQuickAdd(false);
                 setBatchItems([{ id: Date.now(), item: '', quantity: '' }]);
@@ -1094,7 +1103,7 @@
                 const order = orders.find(o => o.id === m.orderId);
                 if(order) {
                     const updated = order.materials.filter(x => x.id !== m.id);
-                    await onUpdateOrder({ ...order, materials: updated }, false);
+                    await onUpdateOrder({ ...order, materials: updated }, {type: 'material', msg: `자재 삭제: ${m.item}`});
                 }
             };
 
@@ -1259,7 +1268,6 @@
                                     </select>
                                 </div>
                                 
-                                {/* 🌟 퀵애드 타입 선택 (발주/접수) */}
                                 <div className="flex gap-4 text-sm p-1">
                                     <label className="flex items-center gap-2 cursor-pointer">
                                         <input type="radio" name="quickAddType" checked={quickAddType === '발주'} onChange={()=>setQuickAddType('발주')} className="accent-indigo-600"/>
@@ -1269,7 +1277,6 @@
                                         <input type="radio" name="quickAddType" checked={quickAddType === '접수'} onChange={()=>setQuickAddType('접수')} className="accent-orange-600"/>
                                         <span>가공 (접수)</span>
                                     </label>
-                                    {/* 🌟 배차 옵션 추가 */}
                                     <label className="flex items-center gap-2 cursor-pointer">
                                         <input type="radio" name="quickAddType" checked={quickAddType === '배차'} onChange={()=>setQuickAddType('배차')} className="accent-cyan-600"/>
                                         <span>배차</span>
@@ -1437,13 +1444,14 @@
             
             const [urgentCount, setUrgentCount] = useState(0);
             const [showAlertPopup, setShowAlertPopup] = useState(false);
+            const [showLogPopup, setShowLogPopup] = useState(false); // 🌟 로그 팝업 상태
 
             const [statusPopupOrder, setStatusPopupOrder] = useState(null);
             const [pendingStatus, setPendingStatus] = useState(null);
             
-            const [materialPopupData, setMaterialPopupData] = useState(null); 
+            const [materialPopupData, setMaterialPopupData] = useState(null);
+            const [logs, setLogs] = useState([]); // 🌟 로그 데이터
             
-            // 🌟 자재 자동 삭제 체크용 Ref
             const hasCheckedCleanup = useRef(false);
 
             useEffect(() => {
@@ -1475,6 +1483,7 @@
             useEffect(() => {
                 let unsubAuth = null;
                 let unsubData = null;
+                let unsubLogs = null;
 
                 const init = async () => {
                     if (!auth) {
@@ -1507,14 +1516,15 @@
                 return () => {
                     if (unsubAuth) unsubAuth();
                     if (unsubData) unsubData();
+                    if (unsubLogs) unsubLogs();
                 }
             }, [auth]);
 
             useEffect(() => {
                 if (!user || !db) return;
 
+                // 1. 주문 데이터 리스너
                 const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), orderBy('createdAt', 'desc'));
-                
                 const unsub = onSnapshot(q, (snap) => {
                     const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     setOrders(data.length > 0 ? data : []); 
@@ -1529,10 +1539,19 @@
                     setLoading(false); 
                 });
 
-                return () => unsub();
-            }, [user, db, appId]);
+                // 🌟 2. 관리자일 경우 로그 데이터 리스너
+                if (isAdmin) {
+                    const logQ = query(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), orderBy('createdAt', 'desc'), limit(50));
+                    onSnapshot(logQ, (snap) => {
+                        const logData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        setLogs(logData);
+                    });
+                }
 
-            // 🌟 [추가] 1일 지난 회수완료 자재 자동 삭제 로직 (최초 1회만 실행)
+                return () => unsub();
+            }, [user, db, appId, isAdmin]);
+
+            // 🌟 1일 지난 회수완료 자재 자동 삭제 (상태 변경 24시간 후)
             useEffect(() => {
                 if (orders.length > 0 && isOnline && db && !hasCheckedCleanup.current) {
                     const cleanupMaterials = async () => {
@@ -1546,7 +1565,7 @@
                             
                             let needsUpdate = false;
                             const validMaterials = order.materials.filter(m => {
-                                // 회수완료 상태이고, 완료 시점이 기록되어 있으며, 24시간이 지났으면 삭제
+                                // 회수완료 상태이고, 완료 시점이 24시간 전이면 삭제
                                 if (m.status === '회수완료' && m.completedAt) {
                                     const completedDate = new Date(m.completedAt);
                                     if (completedDate < oneDayAgo) {
@@ -1589,7 +1608,21 @@
                 localStorage.setItem('bk_role', role);
             };
 
-            const saveOrder = async (data) => {
+            // 🌟 로그 저장 함수
+            const addLog = async (logData) => {
+                if (!db || !isOnline) return;
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), {
+                        ...logData,
+                        createdAt: serverTimestamp(),
+                        userId: user?.uid
+                    });
+                } catch (e) {
+                    console.error("Log Error:", e);
+                }
+            };
+
+            const saveOrder = async (data, logInfo = null) => {
                 if (!isOnline || !db) {
                     alert("현재 오프라인 상태이거나 권한이 없어 임시 저장만 가능합니다.");
                     if(data.id && !data.id.startsWith('mock')) setOrders(orders.map(o=>o.id===data.id?data:o));
@@ -1604,6 +1637,16 @@
                         const { id, ...rest } = data; 
                         const displayId = `ORD-24-${Math.floor(100 + Math.random() * 900)}`;
                         await addDoc(col, { ...rest, displayId, createdAt: serverTimestamp(), userId: user?.uid });
+                    }
+
+                    // 🌟 로그 기록 (관리자가 아닐 때만)
+                    if (logInfo && !isAdmin) {
+                        await addLog({
+                            type: logInfo.type,
+                            message: logInfo.msg,
+                            orderName: data.itemName || 'Unknown',
+                            targetId: data.id || 'new'
+                        });
                     }
                 } catch (e) {
                     alert("저장 실패: " + e.message);
@@ -1630,12 +1673,12 @@
                     newData.completedDate = new Date().toISOString().split('T')[0];
                 }
                 
-                await saveOrder(newData); 
+                // 🌟 로그 추가: 상태 변경
+                await saveOrder(newData, { type: 'status', msg: `상태 변경: ${statusPopupOrder.status} → ${pendingStatus}` }); 
                 setPendingStatus(null);
                 setStatusPopupOrder(null);
             };
             
-            // 🌟 자재 상태 변경 실행 (회수완료 시 타임스탬프 기록)
             const executeMaterialStatusChange = async () => {
                 if (!materialPopupData) return;
                 const { material, nextStatus } = materialPopupData;
@@ -1645,7 +1688,7 @@
                     const updated = order.materials.map(x => {
                         if (x.id === material.id) {
                             const newMat = { ...x, status: nextStatus };
-                            // 회수 완료 시점 기록 (자동 삭제용)
+                            // 🌟 회수 완료 시점 기록 (자동 삭제용)
                             if (nextStatus === '회수완료') {
                                 newMat.completedAt = new Date().toISOString();
                             }
@@ -1653,18 +1696,18 @@
                         }
                         return x;
                     });
-                    await saveOrder({ ...order, materials: updated });
+                    // 🌟 로그 추가: 자재 상태 변경
+                    await saveOrder({ ...order, materials: updated }, { type: 'material', msg: `자재 변경: ${material.item} (${material.status} → ${nextStatus})` });
                 }
                 setMaterialPopupData(null);
             };
 
             const stats = useMemo(() => {
                 return {
-                    ongoing: orders.filter(o => !['납품완료', '작업완료'].includes(o.status)).length,
+                    ongoing: orders.filter(o => !['납품완료'].includes(o.status)).length,
                     pickup: orders.reduce((acc, cur) => acc + (cur.materials || []).filter(m => m.status === '회수대기').length, 0),
                     urgent: orders.filter(o => o.deliveryDate && !['납품완료', '작업완료'].includes(o.status) && Math.ceil((new Date(o.deliveryDate) - new Date()) / 86400000) <= 2).length,
-                    completed: orders.filter(o => ['납품완료', '작업완료'].includes(o.status)).length,
-                    // 🌟 납품대기 통계 추가
+                    completed: orders.filter(o => ['납품완료'].includes(o.status)).length,
                     pendingDelivery: orders.filter(o => o.status === '납품대기').length
                 };
             }, [orders]);
@@ -1743,28 +1786,64 @@
                                 {currentView === 'form' && (selectedOrder ? '작업 수정' : '새 작업 등록')}
                             </h2>
                             
-                            <div className="relative">
-                                <button onClick={()=>setShowAlertPopup(!showAlertPopup)} className="p-2 hover:bg-slate-100 rounded-full relative">
-                                    <Bell className="text-slate-600" />
-                                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                                </button>
-                                {showAlertPopup && (
-                                    <div className="absolute right-0 top-full mt-2 w-80 bg-white border rounded-xl shadow-xl p-3 z-50">
-                                        <h4 className="font-bold text-sm mb-2 flex items-center gap-2 text-indigo-600"><Sparkles size={16}/> 최근 업데이트된 작업</h4>
-                                        <div className="space-y-1 max-h-60 overflow-y-auto scroll-touch">
-                                            {recentUpdates.map(o => (
-                                                <div key={o.id} onClick={()=>handleNavigate(o)} className="text-xs p-2 hover:bg-slate-50 rounded cursor-pointer border-b last:border-0 flex justify-between items-center">
-                                                    <div>
-                                                        <div className="font-bold truncate max-w-[150px]">{o.itemName}</div>
-                                                        <div className="text-gray-400 text-[10px]">{o.displayId}</div>
-                                                    </div>
-                                                    <StatusBadge status={o.status} />
+                            <div className="flex items-center gap-3">
+                                {/* 🌟 관리자 전용 알림 아이콘 (2203 로그인 시에만 보임) */}
+                                {isAdmin && (
+                                    <div className="relative">
+                                        <button onClick={()=>setShowLogPopup(!showLogPopup)} className="p-2 bg-yellow-100 text-yellow-600 hover:bg-yellow-200 rounded-full relative shadow-sm">
+                                            <ShieldAlert size={20} />
+                                            {logs.length > 0 && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>}
+                                        </button>
+                                        {showLogPopup && (
+                                            <div className="absolute right-0 top-full mt-2 w-80 bg-white border rounded-xl shadow-2xl p-0 z-50 overflow-hidden">
+                                                <div className="bg-yellow-50 p-3 border-b border-yellow-100 flex justify-between items-center">
+                                                    <h4 className="font-bold text-sm flex items-center gap-2 text-yellow-800"><History size={16}/> 스태프 활동 기록</h4>
+                                                    <button onClick={()=>setShowLogPopup(false)}><X size={16} className="text-yellow-600"/></button>
                                                 </div>
-                                            ))}
-                                            {recentUpdates.length === 0 && <div className="text-xs text-gray-400 text-center py-4">최근 변경 내역이 없습니다.</div>}
-                                        </div>
+                                                <div className="max-h-80 overflow-y-auto scroll-touch p-2 space-y-1">
+                                                    {logs.length === 0 && <div className="text-xs text-gray-400 text-center py-4">기록이 없습니다.</div>}
+                                                    {logs.map(log => (
+                                                        <div key={log.id} className="text-xs p-2 hover:bg-slate-50 rounded border-b last:border-0">
+                                                            <div className="flex justify-between items-start mb-1">
+                                                                <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] text-white ${
+                                                                    log.type === 'create' ? 'bg-blue-500' : 
+                                                                    log.type === 'status' ? 'bg-green-500' : 'bg-orange-500'
+                                                                }`}>{log.type === 'create' ? '등록' : log.type === 'status' ? '상태' : '자재'}</span>
+                                                                <span className="text-gray-400 text-[10px]">{formatTime(log.createdAt)}</span>
+                                                            </div>
+                                                            <div className="font-bold text-slate-700 mb-0.5">{log.orderName}</div>
+                                                            <div className="text-gray-500">{log.message}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
+
+                                <div className="relative">
+                                    <button onClick={()=>setShowAlertPopup(!showAlertPopup)} className="p-2 hover:bg-slate-100 rounded-full relative">
+                                        <Bell className="text-slate-600" />
+                                        <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                                    </button>
+                                    {showAlertPopup && (
+                                        <div className="absolute right-0 top-full mt-2 w-80 bg-white border rounded-xl shadow-xl p-3 z-50">
+                                            <h4 className="font-bold text-sm mb-2 flex items-center gap-2 text-indigo-600"><Sparkles size={16}/> 최근 업데이트된 작업</h4>
+                                            <div className="space-y-1 max-h-60 overflow-y-auto scroll-touch">
+                                                {recentUpdates.map(o => (
+                                                    <div key={o.id} onClick={()=>handleNavigate(o)} className="text-xs p-2 hover:bg-slate-50 rounded cursor-pointer border-b last:border-0 flex justify-between items-center">
+                                                        <div>
+                                                            <div className="font-bold truncate max-w-[150px]">{o.itemName}</div>
+                                                            <div className="text-gray-400 text-[10px]">{o.displayId}</div>
+                                                        </div>
+                                                        <StatusBadge status={o.status} />
+                                                    </div>
+                                                ))}
+                                                {recentUpdates.length === 0 && <div className="text-xs text-gray-400 text-center py-4">최근 변경 내역이 없습니다.</div>}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </header>
 
@@ -1779,16 +1858,16 @@
                                 }} onStatusClick={setStatusPopupOrder} />}
                                 {currentView === 'detail' && <DetailView order={selectedOrder} onBack={() => { 
                                     window.history.back(); 
-                                }} onUpdate={(data, view, navigate) => { 
-                                    if(view) {
+                                }} onUpdate={(data, logInfo, navigate, msg) => { 
+                                    if(data === null && logInfo === 'form') { // 수정 버튼 클릭 시
                                         window.history.pushState({ page: 'form' }, '', '');
-                                        setCurrentView(view);
+                                        setCurrentView('form');
                                     } else {
-                                        saveOrder(data);
+                                        saveOrder(data, msg); // 자재 추가 로그 등
                                     }
                                 }} isAdmin={isAdmin} currentUserId={user?.uid} onStatusClick={setStatusPopupOrder} onMaterialStatusClick={(m, next)=>setMaterialPopupData({material:m, nextStatus:next})} />}
-                                {currentView === 'form' && <FormView order={selectedOrder} onSave={(data) => {
-                                    saveOrder(data); 
+                                {currentView === 'form' && <FormView order={selectedOrder} onSave={(data, logInfo) => {
+                                    saveOrder(data, logInfo); 
                                     window.history.back();
                                 }} onDelete={async (id) => {
                                     await deleteOrder(id);
@@ -1800,13 +1879,13 @@
                             </div>
                         </div>
 
-                        {/* 🌟 상태 변경 선택 팝업 */}
+                        {/* 🌟 상태 변경 선택 팝업 (작업완료 추가) */}
                         {statusPopupOrder && !pendingStatus && (
                             <ModalOverlay onClose={() => setStatusPopupOrder(null)}>
                                 <div className="bg-white w-full max-w-xs rounded-xl shadow-2xl p-4 animate-fade-in" onClick={e=>e.stopPropagation()}>
                                     <h3 className="font-bold text-center mb-4 text-lg">상태 변경</h3>
                                     <div className="grid gap-2">
-                                        {['설계중', '작업중', '도장/마감중', '납품대기', '납품완료'].map(st => (
+                                        {['설계중', '작업중', '작업완료', '도장/마감중', '납품대기', '납품완료'].map(st => (
                                             <button 
                                                 key={st}
                                                 onClick={() => setPendingStatus(st)}
@@ -1841,7 +1920,7 @@
                             </ModalOverlay>
                         )}
 
-                        {/* 🌟 [수정] 자재 상태 변경 팝업 (배차 추가) */}
+                        {/* 🌟 자재 상태 변경 팝업 (배차 추가) */}
                         {materialPopupData && (
                             <ModalOverlay onClose={() => setMaterialPopupData(null)}>
                                 <div className="bg-white w-full max-w-xs rounded-xl shadow-2xl p-6 animate-fade-in text-center" onClick={e=>e.stopPropagation()}>
