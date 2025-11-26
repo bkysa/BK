@@ -892,7 +892,17 @@
                         all.push({ ...m, orderId: o.id, orderName: o.itemName });
                     });
                 });
-                return all.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+                // 🌟 [수정] 정렬 로직 변경: 회수완료 상태인 항목은 맨 아래로
+                return all.sort((a, b) => {
+                    const isADone = a.status === '회수완료';
+                    const isBDone = b.status === '회수완료';
+                    
+                    if (isADone && !isBDone) return 1; // a가 회수완료면 뒤로
+                    if (!isADone && isBDone) return -1; // b가 회수완료면 뒤로 (a는 앞으로)
+                    
+                    // 둘 다 상태가 같거나 둘 다 회수완료가 아니면 날짜 내림차순
+                    return new Date(b.date || 0) - new Date(a.date || 0);
+                });
             }, [orders]);
 
             const displayedMaterials = (selectedSupplier && !isCustomMode) 
@@ -1561,24 +1571,25 @@
                 return () => unsub();
             }, [user, db, appId, isAdmin]);
 
-            // 🌟 1일 지난 회수완료 자재 자동 삭제 (상태 변경 24시간 후)
+            // 🌟 [수정] 12시간 지난 회수완료 자재 자동 삭제 (매 1분마다 체크 및 로드 시 실행)
             useEffect(() => {
-                if (orders.length > 0 && isOnline && db && !hasCheckedCleanup.current) {
-                    const cleanupMaterials = async () => {
+                if (orders.length > 0 && isOnline && db) {
+                    const checkAndCleanup = async () => {
                         const now = new Date();
-                        const oneDayAgo = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+                        const twelveHoursAgo = new Date(now.getTime() - (12 * 60 * 60 * 1000)); // 12시간 전
                         
                         const updates = [];
+                        let hasUpdates = false;
 
                         for (const order of orders) {
                             if (!order.materials) continue;
                             
                             let needsUpdate = false;
                             const validMaterials = order.materials.filter(m => {
-                                // 회수완료 상태이고, 완료 시점이 24시간 전이면 삭제
+                                // 회수완료 상태이고, 완료 시점이 기록되어 있으며, 12시간이 지났으면 삭제
                                 if (m.status === '회수완료' && m.completedAt) {
                                     const completedDate = new Date(m.completedAt);
-                                    if (completedDate < oneDayAgo) {
+                                    if (completedDate < twelveHoursAgo) {
                                         needsUpdate = true;
                                         return false; // 삭제
                                     }
@@ -1587,19 +1598,27 @@
                             });
 
                             if (needsUpdate) {
+                                hasUpdates = true;
                                 const col = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
                                 updates.push(updateDoc(doc(col, order.id), { materials: validMaterials }));
                             }
                         }
 
-                        if (updates.length > 0) {
+                        if (hasUpdates) {
                             await Promise.all(updates);
-                            console.log("오래된 회수 완료 자재가 정리되었습니다.");
+                            console.log("12시간 지난 회수 완료 자재가 정리되었습니다.");
                         }
-                        hasCheckedCleanup.current = true;
                     };
                     
-                    cleanupMaterials();
+                    // 1. 최초 로드 시 실행 (이미 실행했는지 체크하지 않고 매번 최신 상태 반영)
+                    if (!hasCheckedCleanup.current) {
+                        checkAndCleanup();
+                        hasCheckedCleanup.current = true;
+                    }
+
+                    // 2. 1분마다 주기적으로 실행 (앱 켜놓은 상태 대응)
+                    const interval = setInterval(checkAndCleanup, 60 * 1000);
+                    return () => clearInterval(interval);
                 }
             }, [orders, isOnline, db, appId]);
 
