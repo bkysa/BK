@@ -1795,7 +1795,8 @@
                                             {logs.length > 0 && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>}
                                         </button>
                                         {showLogPopup && (
-                                            <div className="absolute right-0 top-full mt-2 w-80 bg-white border rounded-xl shadow-2xl p-0 z-50 overflow-hidden">
+                                            /* 🌟 [수정] 모바일에서 팝업이 잘리지 않도록 w-80 대신 반응형 너비 적용 */
+                                            <div className="absolute right-0 top-full mt-2 w-[calc(100vw-5rem)] md:w-80 bg-white border rounded-xl shadow-2xl p-0 z-50 overflow-hidden">
                                                 <div className="bg-yellow-50 p-3 border-b border-yellow-100 flex justify-between items-center">
                                                     <h4 className="font-bold text-sm flex items-center gap-2 text-yellow-800"><History size={16}/> 스태프 활동 기록</h4>
                                                     <button onClick={()=>setShowLogPopup(false)}><X size={16} className="text-yellow-600"/></button>
