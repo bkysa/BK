@@ -749,7 +749,7 @@
                 }
             }, [data.status]);
 
-            // 🌟 파일 업로드 핸들러
+            // 🌟 파일 업로드 핸들러 (수정됨: fullPath 저장)
             const handleFileChange = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -771,12 +771,15 @@
                     
                     // 다운로드 URL 가져오기
                     const downloadURL = await getDownloadURL(snapshot.ref);
-                    console.log("File available at", downloadURL);
+                    
+                    // 🌟 중요: 전체 경로(fullPath)도 함께 저장해야 나중에 확실하게 삭제 가능
+                    const fullPath = snapshot.ref.fullPath;
+                    console.log("File available at", downloadURL, "Path:", fullPath);
                     
                     if (!downloadURL) throw new Error("URL 생성 실패");
 
-                    // 상태 업데이트
-                    const newFile = { id: Date.now(), name: file.name, url: downloadURL };
+                    // 상태 업데이트 (fullPath 추가)
+                    const newFile = { id: Date.now(), name: file.name, url: downloadURL, fullPath: fullPath };
                     setData(prev => ({ ...prev, files: [...(prev.files || []), newFile] }));
                 } catch (error) {
                     console.error("Upload failed", error);
@@ -788,24 +791,37 @@
                 }
             };
 
-            // 🌟 수정됨: 스토리지에서 실제 삭제하는 로직
-            const removeFile = async (fileId, fileUrl) => {
+            // 🌟 수정됨: 스토리지에서 실제 삭제하는 로직 (Path 우선 사용)
+            const removeFile = async (fileObj) => {
                 if(!window.confirm("첨부된 파일을 영구 삭제하시겠습니까? (복구 불가)")) return;
                 
+                const { id, url, fullPath } = fileObj;
+
                 try {
-                    if (storage && fileUrl) {
-                        // URL에서 Storage Reference 생성
-                        const fileRef = ref(storage, fileUrl);
-                        await deleteObject(fileRef);
-                        console.log("File deleted from storage");
+                    if (storage) {
+                        let fileRef;
+                        // 1. fullPath가 있으면 가장 정확하므로 이것을 사용
+                        if (fullPath) {
+                            fileRef = ref(storage, fullPath);
+                        } 
+                        // 2. 과거 데이터라 fullPath가 없으면 URL 사용 (가끔 실패할 수 있음)
+                        else if (url) {
+                            fileRef = ref(storage, url);
+                        }
+
+                        if (fileRef) {
+                            await deleteObject(fileRef);
+                            console.log("File deleted from storage");
+                        }
                     }
                 } catch (error) {
                     console.error("Delete failed", error);
-                    alert("서버 파일 삭제 실패 (목록에서는 제거됩니다): " + error.message);
+                    // 스토리지 삭제 실패해도 DB(화면)에서는 지워주거나 경고 표시
+                    alert("주의: 스토리지 파일 삭제에 실패했습니다. (이미 삭제되었거나 권한 문제일 수 있습니다.) 목록에서는 제거합니다.");
                 }
 
                 // UI 상태 업데이트
-                setData(prev => ({ ...prev, files: prev.files.filter(f => f.id !== fileId) }));
+                setData(prev => ({ ...prev, files: prev.files.filter(f => f.id !== id) }));
             };
 
             const handleSave = () => {
@@ -909,8 +925,8 @@
                                         <Paperclip size={14} className="text-gray-400"/>
                                         <span className="truncate">{f.name}</span>
                                     </div>
-                                    {/* 🌟 수정됨: 삭제 버튼 클릭 시 URL도 함께 전달 */}
-                                    <button onClick={() => removeFile(f.id, f.url)} className="text-red-500 hover:text-red-700"><X size={14}/></button>
+                                    {/* 🌟 수정됨: 파일 객체 전체 전달 */}
+                                    <button onClick={() => removeFile(f)} className="text-red-500 hover:text-red-700"><X size={14}/></button>
                                     </div>
                                 ))}
                                 </div>
@@ -1547,6 +1563,7 @@
             const [logs, setLogs] = useState([]); 
             
             const hasCheckedCleanup = useRef(false);
+            const hasCheckedFileExpiration = useRef(false); // 🌟 파일 만료 체크 플래그
 
             useEffect(() => {
                 const handlePopState = (e) => {
@@ -1645,6 +1662,7 @@
                 return () => unsub();
             }, [user, db, appId, isAdmin]);
 
+            // 🌟 12시간 지난 회수 완료 자재 정리 로직
             useEffect(() => {
                 if (orders.length > 0 && isOnline && db) {
                     const checkAndCleanup = async () => {
@@ -1686,11 +1704,73 @@
                         checkAndCleanup();
                         hasCheckedCleanup.current = true;
                     }
-
                     const interval = setInterval(checkAndCleanup, 60 * 1000);
                     return () => clearInterval(interval);
                 }
             }, [orders, isOnline, db, appId]);
+
+
+            // 🌟🌟 7일 지난 납품완료 파일 삭제 로직 추가 (요청사항 반영)
+            useEffect(() => {
+                if (orders.length > 0 && isOnline && db && storage && !hasCheckedFileExpiration.current) {
+                    
+                    const checkExpiredFiles = async () => {
+                        const now = new Date();
+                        const col = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
+                        const logCol = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
+
+                        for (const order of orders) {
+                            // 1. 납품완료 상태이고 완료일이 존재하며, 파일이 있는 경우만 체크
+                            if (order.status === '납품완료' && order.completedDate && (order.files && order.files.length > 0)) {
+                                
+                                const completedDate = new Date(order.completedDate);
+                                // 날짜 차이 계산 (일 단위)
+                                const diffTime = Math.abs(now - completedDate);
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+                                // 2. 7일이 지났다면 삭제 진행
+                                if (diffDays > 7) {
+                                    console.log(`[Auto Cleanup] Deleting files for order: ${order.itemName} (Completed ${diffDays} days ago)`);
+                                    
+                                    try {
+                                        // 스토리지에서 파일 삭제
+                                        for (const file of order.files) {
+                                            try {
+                                                if (file.fullPath) {
+                                                    await deleteObject(ref(storage, file.fullPath));
+                                                } else if (file.url) {
+                                                    await deleteObject(ref(storage, file.url));
+                                                }
+                                            } catch (err) {
+                                                console.warn("Failed to delete file from storage during auto cleanup:", err);
+                                            }
+                                        }
+
+                                        // DB 업데이트 (파일 목록 비우기)
+                                        await updateDoc(doc(col, order.id), { files: [] });
+
+                                        // 로그 기록
+                                        await addDoc(logCol, {
+                                            type: 'system',
+                                            message: `첨부파일 자동 삭제 (납품완료 7일 경과)`,
+                                            orderName: order.itemName,
+                                            targetId: order.id,
+                                            createdAt: serverTimestamp(),
+                                            userId: 'system'
+                                        });
+
+                                    } catch (err) {
+                                        console.error("Error during auto file cleanup:", err);
+                                    }
+                                }
+                            }
+                        }
+                    };
+
+                    checkExpiredFiles();
+                    hasCheckedFileExpiration.current = true; // 세션당 1회만 체크하도록 설정
+                }
+            }, [orders, isOnline, db, storage, appId]);
 
             useEffect(() => {
                 const urgent = orders.filter(o => {
