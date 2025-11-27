@@ -41,9 +41,24 @@
         /* Animation */
         .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        /* Loading Spinner Animation */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #4f46e5;
+            width: 20px;
+            height: 20px;
+            -webkit-animation: spin 1s linear infinite; /* Safari */
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 
-    <!-- 3. Import Map -->
+    <!-- 3. Import Map (스토리지 추가됨) -->
     <script type="importmap">
     {
         "imports": {
@@ -53,7 +68,8 @@
             "lucide-react": "https://esm.sh/lucide-react@0.330.0",
             "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
             "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
-            "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"
+            "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
+            "firebase/storage": "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js"
         }
     }
     </script>
@@ -73,7 +89,7 @@
             Package, ChevronRight, ChevronLeft, Trash2, Edit3, Download,
             ChevronDown, ChevronUp, Wifi, ArrowRight, Phone, MapPin, Bell, X, Truck, 
             Search, AlertCircle, Sparkles, Paperclip, File, Lock, Key, User, HardHat, 
-            MinusCircle, Save, CheckCircle, Navigation, History, ShieldAlert
+            MinusCircle, Save, CheckCircle, Navigation, History, ShieldAlert, UploadCloud
         } from 'lucide-react';
 
         // --- Firebase Imports ---
@@ -83,6 +99,8 @@
             getFirestore, collection, addDoc, updateDoc, deleteDoc,
             doc, onSnapshot, query, orderBy, serverTimestamp, limit
         } from 'firebase/firestore';
+        // 🌟 스토리지 모듈 추가
+        import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
         // ---------------------------------------------------------
         // ✅ Firebase Config
@@ -128,7 +146,7 @@
             }
         ]; 
 
-        // --- Helper Function: Distance Calculation (Haversine) ---
+        // --- Helper Functions ---
         const getDistance = (lat1, lon1, lat2, lon2) => {
             const R = 6371; 
             const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -161,7 +179,6 @@
             );
         };
 
-        // 🌟 StatusBadge 수정: 작업완료 추가
         const StatusBadge = ({ status, onClick }) => {
             const colors = {
                 '설계중': 'bg-gray-100 text-gray-600 border border-gray-300',
@@ -170,7 +187,6 @@
                 '도장/마감중': 'bg-purple-100 text-purple-700 border border-purple-200',
                 '납품대기': 'bg-teal-100 text-teal-700 border border-teal-200 font-bold animate-pulse',
                 '납품완료': 'bg-slate-200 text-slate-500 line-through border border-slate-300',
-                // Legacy
                 '대기': 'bg-gray-100 text-gray-600',
             };
             
@@ -272,7 +288,7 @@
             const [activeStat, setActiveStat] = useState(null);
             const [activeRoutePopup, setActiveRoutePopup] = useState(null);
 
-            // 동선 최적화
+            // 동선 최적화 로직
             const optimizedRoute = useMemo(() => {
                 const pickupTargets = Object.keys(suppliers).filter(name => 
                     suppliers[name].some(m => ['회수대기', '접수'].includes(m.status))
@@ -336,7 +352,6 @@
                     return list;
                 }
                 
-                // 🌟 우선순위 정의 (수정됨: 작업완료 추가)
                 const priority = {
                     '작업중': 1,
                     '작업완료': 2,
@@ -371,7 +386,6 @@
 
             return (
                 <>
-                    {/* Main Content */}
                     <div className="space-y-6 animate-fade-in pb-10 relative">
                         {/* Stats Grid */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -488,7 +502,6 @@
             );
         };
 
-        // ListView component
         const ListView = ({ orders, onSelect, onAdd, onStatusClick }) => {
             const [searchTerm, setSearchTerm] = useState('');
             const [open, setOpen] = useState({ design: true, prod: true, done: false });
@@ -499,7 +512,6 @@
                 .filter(o => o.itemName !== '기타 자재 발주') 
                 .forEach(o => {
                     if (['설계중', '대기'].includes(o.status)) groups.design.push(o);
-                    // 🌟 작업완료도 제작/마감 단계에 포함
                     else if (['작업중', '작업완료', '도장/마감중'].includes(o.status)) groups.prod.push(o);
                     else groups.done.push(o);
                 });
@@ -549,7 +561,6 @@
             );
         };
 
-        // DetailView
         const DetailView = ({ order, onBack, onUpdate, isAdmin, currentUserId, onStatusClick, onMaterialStatusClick }) => {
             if (!order) return null;
             const canEdit = isAdmin || order.userId === currentUserId;
@@ -623,18 +634,6 @@
                             </div>
                             ))}
                         </div>
-
-                        {canEdit && (
-                        <div className="flex gap-1 border-t pt-2">
-                            <input placeholder="파일명" className="w-1/3 border p-1.5 rounded text-xs bg-gray-50" value={link.name} onChange={e => setLink({ ...link, name: e.target.value })} />
-                            <input placeholder="URL" className="flex-1 border p-1.5 rounded text-xs bg-gray-50" value={link.url} onChange={e => setLink({ ...link, url: e.target.value })} />
-                            <button onClick={() => {
-                                if (!link.name || !link.url) return;
-                                updateOrder({ files: [...(order.files || []), { ...link, id: Date.now() }] });
-                                setLink({ name: '', url: '' });
-                            }} className="bg-slate-700 text-white px-3 rounded text-xs font-bold hover:bg-slate-800">등록</button>
-                        </div>
-                        )}
                     </div>
 
                     <h3 className="font-bold mb-2 flex items-center gap-2"><Package size={18}/> 자재 발주 내역</h3>
@@ -692,7 +691,6 @@
                                 </div>
                                 <button onClick={()=>{
                                     if(!mat.supplier || !mat.item) return;
-                                    // 🌟 자재 추가 시 로그
                                     updateOrder({ materials: [...(order.materials||[]), {...mat, id:Date.now()}] }, { type: 'material', msg: `${mat.item} 자재 추가 (${mat.supplier})` });
                                     setMat({...mat, supplier:'', item:'', quantity:'', status:'발주'});
                                     setShowSuggestions(false);
@@ -704,8 +702,8 @@
             );
         };
 
-        // FormView
-        const FormView = ({ order, onSave, onDelete, onCancel, isAdmin, currentUserId }) => {
+        // FormView (Updated for File Upload)
+        const FormView = ({ order, onSave, onDelete, onCancel, isAdmin, currentUserId, storage }) => {
             const [data, setData] = useState(order || {
                 clientName: '', itemName: '', 
                 manager: '', technician: '', 
@@ -715,6 +713,7 @@
                 completedDate: '', 
                 status: '설계중', description: '', clientContact: '', files: []
             });
+            const [isUploading, setIsUploading] = useState(false);
             const fileInputRef = useRef(null);
 
             const canEdit = !order || isAdmin || order.userId === currentUserId;
@@ -725,21 +724,50 @@
                 }
             }, [data.status]);
 
-            const handleFileChange = (e) => {
+            // 🌟 파일 업로드 핸들러 (스토리지 연동)
+            const handleFileChange = async (e) => {
                 const file = e.target.files[0];
-                if (file) {
-                const mockFile = { id: Date.now(), name: file.name, url: '#' };
-                setData(prev => ({ ...prev, files: [...(prev.files || []), mockFile] }));
+                if (!file) return;
+
+                if (!storage) {
+                    alert("스토리지 서비스가 연결되지 않았습니다.");
+                    return;
+                }
+
+                setIsUploading(true);
+                try {
+                    // 파일 경로: uploads/{timestamp}_{filename}
+                    const storagePath = `uploads/${Date.now()}_${file.name}`;
+                    const storageRef = ref(storage, storagePath);
+                    
+                    // 파일 업로드
+                    const snapshot = await uploadBytes(storageRef, file);
+                    
+                    // 다운로드 URL 가져오기
+                    const downloadURL = await getDownloadURL(snapshot.ref);
+                    
+                    // 상태 업데이트
+                    const newFile = { id: Date.now(), name: file.name, url: downloadURL };
+                    setData(prev => ({ ...prev, files: [...(prev.files || []), newFile] }));
+                } catch (error) {
+                    console.error("Upload failed", error);
+                    alert("파일 업로드 실패: " + error.message);
+                } finally {
+                    setIsUploading(false);
+                    // input 초기화 (같은 파일 다시 선택 가능하도록)
+                    if(fileInputRef.current) fileInputRef.current.value = '';
                 }
             };
 
             const removeFile = (fileId) => {
-                setData(prev => ({ ...prev, files: prev.files.filter(f => f.id !== fileId) }));
+                if(window.confirm("첨부된 파일을 목록에서 삭제하시겠습니까?")) {
+                    setData(prev => ({ ...prev, files: prev.files.filter(f => f.id !== fileId) }));
+                }
             };
 
             const handleSave = () => {
+                if (isUploading) return;
                 let logInfo = null;
-                // 🌟 로그 정보 생성
                 if (!order) {
                     logInfo = { type: 'create', msg: `신규 작업 등록: ${data.itemName}` };
                 } else if (order.status !== data.status) {
@@ -805,7 +833,6 @@
                                 <select className="border p-2 rounded w-full" value={data.status} onChange={e=>setData({...data, status:e.target.value})}>
                                     <option>설계중</option>
                                     <option>작업중</option>
-                                    {/* 🌟 작업완료 상태 추가 */}
                                     <option>작업완료</option>
                                     <option>도장/마감중</option>
                                     <option>납품대기</option>
@@ -840,17 +867,27 @@
                                     </div>
                                 ))}
                                 </div>
+                                
+                                {/* 🌟 업로드 중일 때 표시 */}
+                                {isUploading && (
+                                    <div className="text-center py-2 flex items-center justify-center gap-2 text-sm text-indigo-600 font-bold">
+                                        <div className="loader"></div> 업로드 중...
+                                    </div>
+                                )}
+
                                 <div className="mt-2 flex items-center gap-2">
-                                <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
-                                <button onClick={() => fileInputRef.current.click()} className="text-sm bg-gray-100 border border-gray-300 px-3 py-1.5 rounded flex items-center gap-2 hover:bg-gray-200">
-                                    <Plus size={14}/> 파일 추가
-                                </button>
+                                    <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
+                                    <button onClick={() => !isUploading && fileInputRef.current.click()} disabled={isUploading} className="text-sm bg-gray-100 border border-gray-300 px-3 py-1.5 rounded flex items-center gap-2 hover:bg-gray-200 disabled:opacity-50">
+                                        <UploadCloud size={14}/> {isUploading ? '업로드 중' : '파일 업로드'}
+                                    </button>
                                 </div>
                             </div>
                         </div>
                         <div className="flex justify-end gap-2 pt-4 border-t">
                             {order && <button onClick={()=>onDelete(order.id)} className="text-red-500 text-sm font-bold px-4">삭제</button>}
-                            <button onClick={handleSave} className="bg-slate-800 text-white px-6 py-2 rounded font-bold">저장</button>
+                            <button onClick={handleSave} disabled={isUploading} className="bg-slate-800 text-white px-6 py-2 rounded font-bold disabled:bg-gray-400">
+                                {isUploading ? '처리중...' : '저장'}
+                            </button>
                         </div>
                     </Card>
                 </div>
@@ -858,7 +895,8 @@
         };
 
         const MaterialManageView = ({ suppliers, orders, onUpdateOrder, onMaterialStatusClick }) => {
-            // ... (same code as previous, ensuring '배차' option in quickAdd)
+             // ... Material Management Code (unchanged logic, reused from provided code)
+             // (이 부분은 이전과 동일하지만 전체 코드 길이를 위해 생략하지 않고 포함합니다)
             const [selectedSupplier, setSelectedSupplier] = useState(null);
             const [isCustomMode, setIsCustomMode] = useState(false);
             const [editingMaterial, setEditingMaterial] = useState(null);
@@ -892,15 +930,11 @@
                         all.push({ ...m, orderId: o.id, orderName: o.itemName });
                     });
                 });
-                // 🌟 [수정] 정렬 로직 변경: 회수완료 상태인 항목은 맨 아래로
                 return all.sort((a, b) => {
                     const isADone = a.status === '회수완료';
                     const isBDone = b.status === '회수완료';
-                    
-                    if (isADone && !isBDone) return 1; // a가 회수완료면 뒤로
-                    if (!isADone && isBDone) return -1; // b가 회수완료면 뒤로 (a는 앞으로)
-                    
-                    // 둘 다 상태가 같거나 둘 다 회수완료가 아니면 날짜 내림차순
+                    if (isADone && !isBDone) return 1; 
+                    if (!isADone && isBDone) return -1;
                     return new Date(b.date || 0) - new Date(a.date || 0);
                 });
             }, [orders]);
@@ -963,7 +997,6 @@
 
             const handleBatchAdd = async () => {
                 const validItems = batchItems.filter(i => i.item.trim() !== '');
-                
                 if (validItems.length === 0 && !isCustomMode) return alert("품목을 최소 1개 이상 입력하세요");
                 if (isCustomMode && !batchHeader.supplier) return alert("거래처명을 입력하세요.");
                 
@@ -1023,8 +1056,6 @@
                 }
 
                 const updatedMaterials = [...(targetOrder.materials || []), ...newMaterials];
-                
-                // 🌟 로그 추가: 자재 일괄 등록
                 const logMsg = isInfoRegistration ? null : { type: 'material', msg: `${quickAddType} 일괄 등록 (${validItems.length}건) - ${finalSupplier}` };
                 
                 await onUpdateOrder({ ...targetOrder, materials: updatedMaterials }, logMsg);
@@ -1072,7 +1103,6 @@
                             materials: []
                         };
                     }
-                    
                     const newInfoItem = {
                         id: Date.now(),
                         supplier: selectedSupplier,
@@ -1082,10 +1112,8 @@
                         date: new Date().toISOString().split('T')[0],
                         supplierInfo: { ...editingInfoData, ...getMockCoordinates(editingInfoData.address) }
                     };
-                    
                     await onUpdateOrder({ ...miscOrder, materials: [...(miscOrder.materials || []), newInfoItem] }, false);
                 }
-
                 setIsEditingInfo(false);
             };
 
@@ -1173,7 +1201,6 @@
                                 </div>
                                 <div>
                                     <label className="text-xs text-gray-500 font-bold">거래처</label>
-                                    {/* 🌟 거래처 선택 (Datalist 사용) - 클릭 시 목록, 직접 입력 가능 */}
                                     <input 
                                         list="suppliers-list"
                                         className="w-full border p-2 rounded text-sm" 
@@ -1464,13 +1491,13 @@
             
             const [urgentCount, setUrgentCount] = useState(0);
             const [showAlertPopup, setShowAlertPopup] = useState(false);
-            const [showLogPopup, setShowLogPopup] = useState(false); // 🌟 로그 팝업 상태
+            const [showLogPopup, setShowLogPopup] = useState(false); 
 
             const [statusPopupOrder, setStatusPopupOrder] = useState(null);
             const [pendingStatus, setPendingStatus] = useState(null);
             
             const [materialPopupData, setMaterialPopupData] = useState(null);
-            const [logs, setLogs] = useState([]); // 🌟 로그 데이터
+            const [logs, setLogs] = useState([]); 
             
             const hasCheckedCleanup = useRef(false);
 
@@ -1486,17 +1513,19 @@
                 return () => window.removeEventListener('popstate', handlePopState);
             }, [currentView]);
 
-            const { auth, db, appId } = useMemo(() => {
+            // 🌟 3. 스토리지 초기화 추가
+            const { auth, db, storage, appId } = useMemo(() => {
                 try {
                     const app = initializeApp(firebaseConfig);
                     return { 
                         auth: getAuth(app), 
                         db: getFirestore(app), 
+                        storage: getStorage(app), // 스토리지 객체 리턴
                         appId: firebaseConfig.appId 
                     };
                 } catch (e) { 
                     console.error("Firebase Init Error:", e);
-                    return { auth: null, db: null, appId: null }; 
+                    return { auth: null, db: null, storage: null, appId: null }; 
                 }
             }, []);
 
@@ -1543,7 +1572,6 @@
             useEffect(() => {
                 if (!user || !db) return;
 
-                // 1. 주문 데이터 리스너
                 const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), orderBy('createdAt', 'desc'));
                 const unsub = onSnapshot(q, (snap) => {
                     const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1559,7 +1587,6 @@
                     setLoading(false); 
                 });
 
-                // 🌟 2. 관리자일 경우 로그 데이터 리스너
                 if (isAdmin) {
                     const logQ = query(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), orderBy('createdAt', 'desc'), limit(50));
                     onSnapshot(logQ, (snap) => {
@@ -1571,12 +1598,11 @@
                 return () => unsub();
             }, [user, db, appId, isAdmin]);
 
-            // 🌟 [수정] 12시간 지난 회수완료 자재 자동 삭제 (매 1분마다 체크 및 로드 시 실행)
             useEffect(() => {
                 if (orders.length > 0 && isOnline && db) {
                     const checkAndCleanup = async () => {
                         const now = new Date();
-                        const twelveHoursAgo = new Date(now.getTime() - (12 * 60 * 60 * 1000)); // 12시간 전
+                        const twelveHoursAgo = new Date(now.getTime() - (12 * 60 * 60 * 1000)); 
                         
                         const updates = [];
                         let hasUpdates = false;
@@ -1586,15 +1612,14 @@
                             
                             let needsUpdate = false;
                             const validMaterials = order.materials.filter(m => {
-                                // 회수완료 상태이고, 완료 시점이 기록되어 있으며, 12시간이 지났으면 삭제
                                 if (m.status === '회수완료' && m.completedAt) {
                                     const completedDate = new Date(m.completedAt);
                                     if (completedDate < twelveHoursAgo) {
                                         needsUpdate = true;
-                                        return false; // 삭제
+                                        return false; 
                                     }
                                 }
-                                return true; // 유지
+                                return true; 
                             });
 
                             if (needsUpdate) {
@@ -1610,13 +1635,11 @@
                         }
                     };
                     
-                    // 1. 최초 로드 시 실행 (이미 실행했는지 체크하지 않고 매번 최신 상태 반영)
                     if (!hasCheckedCleanup.current) {
                         checkAndCleanup();
                         hasCheckedCleanup.current = true;
                     }
 
-                    // 2. 1분마다 주기적으로 실행 (앱 켜놓은 상태 대응)
                     const interval = setInterval(checkAndCleanup, 60 * 1000);
                     return () => clearInterval(interval);
                 }
@@ -1637,7 +1660,6 @@
                 localStorage.setItem('bk_role', role);
             };
 
-            // 🌟 로그 저장 함수
             const addLog = async (logData) => {
                 if (!db || !isOnline) return;
                 try {
@@ -1668,7 +1690,6 @@
                         await addDoc(col, { ...rest, displayId, createdAt: serverTimestamp(), userId: user?.uid });
                     }
 
-                    // 🌟 로그 기록 (관리자가 아닐 때만)
                     if (logInfo && !isAdmin) {
                         await addLog({
                             type: logInfo.type,
@@ -1702,7 +1723,6 @@
                     newData.completedDate = new Date().toISOString().split('T')[0];
                 }
                 
-                // 🌟 로그 추가: 상태 변경
                 await saveOrder(newData, { type: 'status', msg: `상태 변경: ${statusPopupOrder.status} → ${pendingStatus}` }); 
                 setPendingStatus(null);
                 setStatusPopupOrder(null);
@@ -1717,7 +1737,6 @@
                     const updated = order.materials.map(x => {
                         if (x.id === material.id) {
                             const newMat = { ...x, status: nextStatus };
-                            // 🌟 회수 완료 시점 기록 (자동 삭제용)
                             if (nextStatus === '회수완료') {
                                 newMat.completedAt = new Date().toISOString();
                             }
@@ -1725,7 +1744,6 @@
                         }
                         return x;
                     });
-                    // 🌟 로그 추가: 자재 상태 변경
                     await saveOrder({ ...order, materials: updated }, { type: 'material', msg: `자재 변경: ${material.item} (${material.status} → ${nextStatus})` });
                 }
                 setMaterialPopupData(null);
@@ -1816,7 +1834,6 @@
                             </h2>
                             
                             <div className="flex items-center gap-3">
-                                {/* 🌟 관리자 전용 알림 아이콘 (2203 로그인 시에만 보임) */}
                                 {isAdmin && (
                                     <div className="relative">
                                         <button onClick={()=>setShowLogPopup(!showLogPopup)} className="p-2 bg-yellow-100 text-yellow-600 hover:bg-yellow-200 rounded-full relative shadow-sm">
@@ -1824,7 +1841,6 @@
                                             {logs.length > 0 && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>}
                                         </button>
                                         
-                                        {/* 🌟 [수정] 스태프 로그 팝업을 중앙 모달(ModalOverlay)로 변경하여 모바일 잘림 해결 */}
                                         {showLogPopup && (
                                             <ModalOverlay onClose={() => setShowLogPopup(false)}>
                                                 <div className="bg-white w-full max-w-sm rounded-xl shadow-2xl overflow-hidden animate-fade-in" onClick={e=>e.stopPropagation()}>
@@ -1892,18 +1908,18 @@
                                 {currentView === 'detail' && <DetailView order={selectedOrder} onBack={() => { 
                                     window.history.back(); 
                                 }} onUpdate={(data, logInfo, navigate, msg) => { 
-                                    if(data === null && logInfo === 'form') { // 수정 버튼 클릭 시
+                                    if(data === null && logInfo === 'form') { 
                                         window.history.pushState({ page: 'form' }, '', '');
                                         setCurrentView('form');
                                     } else {
-                                        saveOrder(data, msg); // 자재 추가 로그 등
+                                        saveOrder(data, msg); 
                                     }
                                 }} isAdmin={isAdmin} currentUserId={user?.uid} onStatusClick={setStatusPopupOrder} onMaterialStatusClick={(m, next)=>setMaterialPopupData({material:m, nextStatus:next})} />}
-                                {currentView === 'form' && <FormView order={selectedOrder} onSave={(data, logInfo) => {
+                                {currentView === 'form' && <FormView order={selectedOrder} storage={storage} onSave={(data, logInfo) => {
                                     saveOrder(data, logInfo); 
                                     window.history.back();
                                 }} onDelete={async (id) => {
-                                    await deleteOrder(id);
+                                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id));
                                     window.history.back();
                                 }} onCancel={() => { 
                                     window.history.back(); 
@@ -1912,7 +1928,6 @@
                             </div>
                         </div>
 
-                        {/* 🌟 상태 변경 선택 팝업 (작업완료 추가) */}
                         {statusPopupOrder && !pendingStatus && (
                             <ModalOverlay onClose={() => setStatusPopupOrder(null)}>
                                 <div className="bg-white w-full max-w-xs rounded-xl shadow-2xl p-4 animate-fade-in" onClick={e=>e.stopPropagation()}>
@@ -1933,7 +1948,6 @@
                             </ModalOverlay>
                         )}
 
-                        {/* 🌟 상태 변경 최종 확인 팝업 (작업) */}
                         {pendingStatus && (
                             <ModalOverlay onClose={() => setPendingStatus(null)}>
                                 <div className="bg-white w-full max-w-xs rounded-xl shadow-2xl p-6 animate-fade-in text-center" onClick={e=>e.stopPropagation()}>
@@ -1953,7 +1967,6 @@
                             </ModalOverlay>
                         )}
 
-                        {/* 🌟 자재 상태 변경 팝업 (배차 추가) */}
                         {materialPopupData && (
                             <ModalOverlay onClose={() => setMaterialPopupData(null)}>
                                 <div className="bg-white w-full max-w-xs rounded-xl shadow-2xl p-6 animate-fade-in text-center" onClick={e=>e.stopPropagation()}>
