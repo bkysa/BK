@@ -99,8 +99,8 @@
             getFirestore, collection, addDoc, updateDoc, deleteDoc,
             doc, onSnapshot, query, orderBy, serverTimestamp, limit
         } from 'firebase/firestore';
-        // 🌟 스토리지 모듈 추가
-        import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+        // 🌟 스토리지 모듈 추가 (deleteObject 추가됨)
+        import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
         // ---------------------------------------------------------
         // ✅ Firebase Config
@@ -749,7 +749,7 @@
                 }
             }, [data.status]);
 
-            // 🌟 파일 업로드 핸들러 수정
+            // 🌟 파일 업로드 핸들러
             const handleFileChange = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -788,10 +788,24 @@
                 }
             };
 
-            const removeFile = (fileId) => {
-                if(window.confirm("첨부된 파일을 목록에서 삭제하시겠습니까?")) {
-                    setData(prev => ({ ...prev, files: prev.files.filter(f => f.id !== fileId) }));
+            // 🌟 수정됨: 스토리지에서 실제 삭제하는 로직
+            const removeFile = async (fileId, fileUrl) => {
+                if(!window.confirm("첨부된 파일을 영구 삭제하시겠습니까? (복구 불가)")) return;
+                
+                try {
+                    if (storage && fileUrl) {
+                        // URL에서 Storage Reference 생성
+                        const fileRef = ref(storage, fileUrl);
+                        await deleteObject(fileRef);
+                        console.log("File deleted from storage");
+                    }
+                } catch (error) {
+                    console.error("Delete failed", error);
+                    alert("서버 파일 삭제 실패 (목록에서는 제거됩니다): " + error.message);
                 }
+
+                // UI 상태 업데이트
+                setData(prev => ({ ...prev, files: prev.files.filter(f => f.id !== fileId) }));
             };
 
             const handleSave = () => {
@@ -895,7 +909,8 @@
                                         <Paperclip size={14} className="text-gray-400"/>
                                         <span className="truncate">{f.name}</span>
                                     </div>
-                                    <button onClick={() => removeFile(f.id)} className="text-red-500 hover:text-red-700"><X size={14}/></button>
+                                    {/* 🌟 수정됨: 삭제 버튼 클릭 시 URL도 함께 전달 */}
+                                    <button onClick={() => removeFile(f.id, f.url)} className="text-red-500 hover:text-red-700"><X size={14}/></button>
                                     </div>
                                 ))}
                                 </div>
