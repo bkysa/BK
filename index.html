@@ -89,7 +89,7 @@
             Package, ChevronRight, ChevronLeft, Trash2, Edit3, Download,
             ChevronDown, ChevronUp, Wifi, ArrowRight, Phone, MapPin, Bell, X, Truck, 
             Search, AlertCircle, Sparkles, Paperclip, File, Lock, Key, User, HardHat, 
-            MinusCircle, Save, CheckCircle, Navigation, History, ShieldAlert, UploadCloud, Users, Boxes
+            MinusCircle, Save, CheckCircle, Navigation, History, ShieldAlert, UploadCloud, Users, Boxes, Settings
         } from 'lucide-react';
 
         // --- Firebase Imports ---
@@ -131,8 +131,8 @@
             '대한아크릴': { phone: '02-7777-8888', email: 'acryl@daehan.com', address: '서울 중구 방산시장 A동', lat: 37.5670, lng: 127.0000 }
         };
 
-        // 🌟 작업자 목록
-        const WORKERS = ['정대종', '조윤석', '이태의', '유시안', '윤진후', '김정태', '김한솔'];
+        // 🌟 기본 작업자 목록 (DB 없을 시 초기값)
+        const DEFAULT_WORKERS = ['정대종', '조윤석', '이태의', '유시안', '윤진후', '김정태', '김한솔'];
 
         const MOCK_DATA = [
             {
@@ -563,10 +563,19 @@
             );
         };
 
-        const CalendarView = ({ orders, onSelect, scheduleData, onUpdateSchedule, onAddSchedule }) => {
+        const CalendarView = ({ orders, onSelect, scheduleData, onUpdateSchedule, onAddSchedule, workers, onAddWorker, onDeleteWorker }) => {
             const [viewMode, setViewMode] = useState('delivery'); // 'delivery' | 'worker' | 'material_weekly'
             const [date, setDate] = useState(new Date());
-            const [scheduleModal, setScheduleModal] = useState(null);
+            const [scheduleModal, setScheduleModal] = useState(null); // { worker, date, content, id }
+            const [isEditingSchedule, setIsEditingSchedule] = useState(false);
+            
+            // 작업자 관리 모달 상태
+            const [manageWorkersModal, setManageWorkersModal] = useState(false);
+            const [newWorkerName, setNewWorkerName] = useState('');
+
+            useEffect(() => {
+                if (!scheduleModal) setIsEditingSchedule(false);
+            }, [scheduleModal]);
 
             // --- Delivery Calendar Logic (Monthly) ---
             const days = [];
@@ -644,10 +653,9 @@
                 <div className="h-full flex flex-col animate-fade-in pb-10 min-h-0">
                     <div className="flex justify-between items-center mb-4 flex-shrink-0">
                         <div className="flex bg-slate-200 p-1 rounded-lg">
-                            <button onClick={()=>setViewMode('delivery')} className={`px-2 py-1 text-[10px] md:text-xs font-bold rounded ${viewMode==='delivery'?'bg-white shadow text-indigo-900':'text-gray-500'}`}>월간(납품)</button>
-                            <button onClick={()=>setViewMode('worker')} className={`px-2 py-1 text-[10px] md:text-xs font-bold rounded ${viewMode==='worker'?'bg-white shadow text-indigo-900':'text-gray-500'}`}>주간(작업)</button>
-                            {/* 🌟 새로운 탭 추가: 주간(자재) */}
-                            <button onClick={()=>setViewMode('material_weekly')} className={`px-2 py-1 text-[10px] md:text-xs font-bold rounded ${viewMode==='material_weekly'?'bg-white shadow text-indigo-900':'text-gray-500'}`}>주간(자재)</button>
+                            <button onClick={()=>setViewMode('delivery')} className={`px-2 py-1 text-[10px] md:text-xs font-bold rounded ${viewMode==='delivery'?'bg-white shadow text-indigo-900':'text-gray-500'}`}>마감(월간)</button>
+                            <button onClick={()=>setViewMode('worker')} className={`px-2 py-1 text-[10px] md:text-xs font-bold rounded ${viewMode==='worker'?'bg-white shadow text-indigo-900':'text-gray-500'}`}>작업(주간)</button>
+                            <button onClick={()=>setViewMode('material_weekly')} className={`px-2 py-1 text-[10px] md:text-xs font-bold rounded ${viewMode==='material_weekly'?'bg-white shadow text-indigo-900':'text-gray-500'}`}>발주(주간)</button>
                         </div>
                         <div className="flex gap-2 items-center">
                             <h2 className="text-sm md:text-lg font-bold whitespace-nowrap">
@@ -708,9 +716,15 @@
                             </div>
                         </div>
                     ) : viewMode === 'worker' ? (
-                        <div className="flex-1 bg-white border rounded-xl overflow-hidden flex flex-col shadow-sm min-h-0">
-                            {/* Worker Header */}
-                            <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr_1fr_1fr] bg-slate-100 border-b flex-shrink-0">
+                        <div className="flex-1 bg-white border rounded-xl overflow-hidden flex flex-col shadow-sm min-h-0 relative">
+                            {/* Worker Header with Manage Button */}
+                            <div className="absolute top-2 right-2 z-10">
+                                <button onClick={()=>setManageWorkersModal(true)} className="bg-white border text-gray-600 px-2 py-1 rounded text-xs font-bold shadow hover:bg-slate-50 flex items-center gap-1">
+                                    <Settings size={12}/> 작업자 관리
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr_1fr_1fr] bg-slate-100 border-b flex-shrink-0 mt-8 md:mt-0">
                                 <div className="p-2 text-center font-bold text-xs flex items-center justify-center bg-slate-200">이름</div>
                                 {weekDates.map((d, i) => {
                                     const isToday = getLocalDateString(d) === getLocalDateString(new Date());
@@ -724,18 +738,18 @@
                             </div>
                             {/* Worker Grid */}
                             <div className="flex-1 overflow-y-auto">
-                                {WORKERS.map(worker => (
-                                    <div key={worker} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr_1fr_1fr] border-b min-h-[80px]">
+                                {workers.map(worker => (
+                                    <div key={worker.id || worker.name} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr_1fr_1fr] border-b min-h-[80px]">
                                         <div className="p-2 bg-slate-50 font-bold text-xs flex items-center justify-center border-r">
-                                            {worker}
+                                            {worker.name}
                                         </div>
                                         {weekDates.map((d, i) => {
                                             const dateStr = getLocalDateString(d);
-                                            const schedules = scheduleData.filter(s => s.worker === worker && s.date === dateStr);
+                                            const schedules = scheduleData.filter(s => s.worker === worker.name && s.date === dateStr);
                                             return (
                                                 <div 
                                                     key={i} 
-                                                    onClick={() => handleScheduleClick(worker, dateStr, schedules[0])}
+                                                    onClick={() => handleScheduleClick(worker.name, dateStr, schedules[0])}
                                                     className="border-l p-1 hover:bg-indigo-50 cursor-pointer relative group transition-colors"
                                                 >
                                                     {schedules.length > 0 ? (
@@ -754,6 +768,7 @@
                                         })}
                                     </div>
                                 ))}
+                                {workers.length === 0 && <div className="p-8 text-center text-gray-400 text-sm">등록된 작업자가 없습니다. [작업자 관리]에서 추가해주세요.</div>}
                             </div>
                         </div>
                     ) : (
@@ -809,23 +824,78 @@
                         </div>
                     )}
 
+                    {/* Schedule Detail/Edit Modal */}
                     {scheduleModal && (
                         <ModalOverlay onClose={() => setScheduleModal(null)}>
+                            <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl animate-fade-in flex flex-col max-h-[90vh]" onClick={e=>e.stopPropagation()}>
+                                <div className="p-4 border-b flex justify-between items-center">
+                                    <div>
+                                        <h3 className="font-bold text-xl">{scheduleModal.worker}</h3>
+                                        <p className="text-sm text-gray-500">{scheduleModal.date} 일정</p>
+                                    </div>
+                                    <button onClick={() => setScheduleModal(null)} className="text-gray-400 hover:text-gray-600"><X size={24}/></button>
+                                </div>
+                                
+                                <div className="p-6 overflow-y-auto flex-1">
+                                    {isEditingSchedule ? (
+                                        <textarea 
+                                            className="w-full h-64 border rounded-lg p-4 text-base focus:ring-2 focus:ring-indigo-500 outline-none resize-none bg-slate-50" 
+                                            placeholder="작업 내용을 입력하세요"
+                                            value={scheduleModal.content}
+                                            onChange={e => setScheduleModal({...scheduleModal, content: e.target.value})}
+                                            autoFocus
+                                        />
+                                    ) : (
+                                        <div className="whitespace-pre-wrap text-lg leading-relaxed text-slate-800 min-h-[150px]">
+                                            {scheduleModal.content || <span className="text-gray-400">등록된 일정이 없습니다.</span>}
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                <div className="p-4 border-t bg-slate-50 flex gap-2">
+                                    {isEditingSchedule ? (
+                                        <>
+                                            <button onClick={() => setIsEditingSchedule(false)} className="flex-1 bg-white border border-gray-300 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-50">취소</button>
+                                            <button onClick={saveSchedule} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-lg flex items-center justify-center gap-2"><Save size={18}/> 저장</button>
+                                        </>
+                                    ) : (
+                                        <button onClick={() => setIsEditingSchedule(true)} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-lg flex items-center justify-center gap-2"><Edit3 size={18}/> 내용 수정</button>
+                                    )}
+                                </div>
+                            </div>
+                        </ModalOverlay>
+                    )}
+
+                    {/* Manage Workers Modal */}
+                    {manageWorkersModal && (
+                        <ModalOverlay onClose={() => setManageWorkersModal(null)}>
                             <div className="bg-white w-full max-w-sm rounded-xl p-6 shadow-2xl animate-fade-in" onClick={e=>e.stopPropagation()}>
-                                <h3 className="font-bold text-lg mb-1">{scheduleModal.worker}</h3>
-                                <p className="text-sm text-gray-500 mb-4">{scheduleModal.date} 일정</p>
-                                
-                                <textarea 
-                                    className="w-full border rounded-lg p-3 text-sm min-h-[100px] mb-4 focus:ring-2 focus:ring-indigo-500 outline-none" 
-                                    placeholder="작업 내용을 입력하세요 (예: 홍성 실측)"
-                                    value={scheduleModal.content}
-                                    onChange={e => setScheduleModal({...scheduleModal, content: e.target.value})}
-                                    autoFocus
-                                />
-                                
-                                <div className="flex gap-2">
-                                    <button onClick={() => setScheduleModal(null)} className="flex-1 bg-gray-100 text-gray-600 py-2 rounded-lg text-sm font-bold">취소</button>
-                                    <button onClick={saveSchedule} className="flex-1 bg-slate-800 text-white py-2 rounded-lg text-sm font-bold">저장</button>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="font-bold text-lg">작업자 명단 관리</h3>
+                                    <button onClick={()=>setManageWorkersModal(null)}><X size={20}/></button>
+                                </div>
+                                <div className="mb-4 flex gap-2">
+                                    <input 
+                                        className="border rounded px-3 py-2 text-sm flex-1"
+                                        placeholder="이름 입력"
+                                        value={newWorkerName}
+                                        onChange={e => setNewWorkerName(e.target.value)}
+                                        onKeyPress={e => e.key === 'Enter' && newWorkerName && (onAddWorker(newWorkerName), setNewWorkerName(''))}
+                                    />
+                                    <button 
+                                        onClick={() => { if(newWorkerName) { onAddWorker(newWorkerName); setNewWorkerName(''); }}}
+                                        className="bg-indigo-600 text-white px-3 rounded text-sm font-bold"
+                                    >
+                                        추가
+                                    </button>
+                                </div>
+                                <div className="max-h-[300px] overflow-y-auto space-y-2">
+                                    {workers.map(w => (
+                                        <div key={w.id} className="flex justify-between items-center bg-slate-50 p-2 rounded">
+                                            <span>{w.name}</span>
+                                            <button onClick={() => onDeleteWorker(w.id)} className="text-red-500 hover:bg-red-100 p-1 rounded"><Trash2 size={16}/></button>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </ModalOverlay>
@@ -1396,7 +1466,8 @@
         function App() {
             const [user, setUser] = useState(null);
             const [orders, setOrders] = useState([]);
-            const [schedules, setSchedules] = useState([]); // 🌟 작업자 스케줄 상태 추가
+            const [schedules, setSchedules] = useState([]); 
+            const [workers, setWorkers] = useState([]); // 🌟 작업자 상태 추가
             const [loading, setLoading] = useState(true);
             const [isOnline, setIsOnline] = useState(false);
             const [connectionError, setConnectionError] = useState(null);
@@ -1419,6 +1490,7 @@
             
             const hasCheckedCleanup = useRef(false);
             const hasCheckedFileExpiration = useRef(false);
+            const hasSeededWorkers = useRef(false); // 작업자 초기화 체크
 
             useEffect(() => {
                 const handlePopState = (e) => {
@@ -1464,23 +1536,59 @@
                     setIsOnline(true); setLoading(false);
                 }, () => { setIsOnline(false); setOrders(MOCK_DATA); setLoading(false); });
 
-                // 2. Schedules (🌟 New)
+                // 2. Schedules
                 const sQ = query(collection(db, 'artifacts', appId, 'public', 'data', 'schedules'));
                 const unsubSchedules = onSnapshot(sQ, (snap) => {
                     setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
 
-                // 3. Logs
+                // 3. Workers (🌟 New)
+                const wQ = query(collection(db, 'artifacts', appId, 'public', 'data', 'workers'), orderBy('createdAt', 'asc'));
+                const unsubWorkers = onSnapshot(wQ, (snap) => {
+                    if (snap.empty && !hasSeededWorkers.current) {
+                        // DB가 비어있으면 초기 렌더링 시에는 기본값 사용 (자동 저장은 하지 않음)
+                        setWorkers(DEFAULT_WORKERS.map(name => ({ id: name, name }))); 
+                    } else {
+                        setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                    }
+                    hasSeededWorkers.current = true;
+                });
+
+                // 4. Logs
                 let unsubLogs = null;
                 if (isAdmin) {
                     const logQ = query(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), orderBy('createdAt', 'desc'), limit(50));
                     unsubLogs = onSnapshot(logQ, (snap) => setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
                 }
 
-                return () => { unsubOrders(); unsubSchedules(); if(unsubLogs) unsubLogs(); };
+                return () => { unsubOrders(); unsubSchedules(); unsubWorkers(); if(unsubLogs) unsubLogs(); };
             }, [user, db, appId, isAdmin]);
 
-            // Auto Cleanup Logics (File expiration only, 🌟 자재 삭제 로직은 제거됨)
+            // 🌟 작업자 추가/삭제 함수
+            const addWorker = async (name) => {
+                if (!db || !isOnline) return;
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'workers'), {
+                        name,
+                        createdAt: serverTimestamp()
+                    });
+                } catch (e) { alert("추가 실패: " + e.message); }
+            };
+
+            const deleteWorker = async (id) => {
+                if (!db || !isOnline) return;
+                if (!window.confirm("삭제하시겠습니까?")) return;
+                try {
+                    // ID가 이름과 같으면(초기값) 실제 문서 ID가 없어서 삭제 불가하므로 경고
+                    if (DEFAULT_WORKERS.includes(id) && !workers.some(w => w.id === id && w.createdAt)) {
+                        alert("기본 작업자는 DB에 저장되기 전까지 삭제할 수 없습니다. 새 작업자를 추가하면 DB가 활성화됩니다.");
+                        return;
+                    }
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'workers', id));
+                } catch (e) { alert("삭제 실패: " + e.message); }
+            };
+
+            // Auto Cleanup Logics (File expiration only)
             useEffect(() => {
                 if (orders.length > 0 && isOnline && db && storage && !hasCheckedFileExpiration.current) {
                     const checkExpiredFiles = async () => {
@@ -1657,7 +1765,18 @@
                         <div className="h-full overflow-y-auto p-4 md:p-6 scroll-touch">
                             <div className={`max-w-5xl mx-auto ${['calendar', 'materials', 'detail'].includes(currentView) ? 'h-full' : ''}`}>
                                 {currentView === 'dashboard' && <Dashboard orders={orders} stats={stats} suppliers={suppliers} onNavigate={handleNavigate} onStatusClick={setStatusPopupOrder} isAdmin={isAdmin} currentUserId={user?.uid} />}
-                                {currentView === 'calendar' && <CalendarView orders={orders} onSelect={handleNavigate} scheduleData={schedules} onUpdateSchedule={updateSchedule} onAddSchedule={addSchedule} />}
+                                {currentView === 'calendar' && (
+                                    <CalendarView 
+                                        orders={orders} 
+                                        onSelect={handleNavigate} 
+                                        scheduleData={schedules} 
+                                        onUpdateSchedule={updateSchedule} 
+                                        onAddSchedule={addSchedule} 
+                                        workers={workers}
+                                        onAddWorker={addWorker}
+                                        onDeleteWorker={deleteWorker}
+                                    />
+                                )}
                                 {currentView === 'list' && !selectedOrder && <ListView orders={orders} onSelect={handleNavigate} onAdd={() => { window.history.pushState({ page: 'form' }, '', ''); setSelectedOrder(null); setCurrentView('form'); }} onStatusClick={setStatusPopupOrder} />}
                                 {currentView === 'detail' && <DetailView order={selectedOrder} onBack={() => window.history.back()} onUpdate={(data, logInfo, navigate, msg) => { if(data === null && logInfo === 'form') { window.history.pushState({ page: 'form' }, '', ''); setCurrentView('form'); } else { saveOrder(data, msg); } }} isAdmin={isAdmin} currentUserId={user?.uid} onStatusClick={setStatusPopupOrder} onMaterialStatusClick={(m, next)=>setMaterialPopupData({material:m, nextStatus:next})} />}
                                 {currentView === 'form' && <FormView order={selectedOrder} storage={storage} onSave={(data, logInfo) => { saveOrder(data, logInfo); window.history.back(); }} onDelete={async (id) => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id)); window.history.back(); }} onCancel={() => window.history.back()} isAdmin={isAdmin} currentUserId={user?.uid} />}
