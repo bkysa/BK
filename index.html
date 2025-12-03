@@ -1537,6 +1537,8 @@
 
             const [currentView, setCurrentView] = useState('dashboard');
             const [selectedOrder, setSelectedOrder] = useState(null);
+            // 🌟 [수정] 이전 화면을 기억하기 위한 상태 변수 추가
+            const [returnView, setReturnView] = useState('list');
             
             const [urgentCount, setUrgentCount] = useState(0);
             const [showAlertPopup, setShowAlertPopup] = useState(false);
@@ -1563,13 +1565,14 @@
                 const handlePopState = (e) => {
                     if (currentView === 'detail' || currentView === 'form') {
                         setSelectedOrder(null);
-                        setCurrentView('list');
+                        // 🌟 [수정] 무조건 'list'가 아니라 저장된 returnView로 복귀
+                        setCurrentView(returnView);
                     }
                 };
 
                 window.addEventListener('popstate', handlePopState);
                 return () => window.removeEventListener('popstate', handlePopState);
-            }, [currentView]);
+            }, [currentView, returnView]); // 🌟 의존성 배열에 returnView 추가
 
             const { auth, db, storage, appId } = useMemo(() => {
                 try {
@@ -1777,6 +1780,8 @@
             }, [orders]);
 
             const handleNavigate = (order) => {
+                // 🌟 [수정] 상세 페이지로 가기 전에 현재 뷰를 저장
+                setReturnView(currentView);
                 window.history.pushState({ page: 'detail' }, '', '');
                 setSelectedOrder(order); setCurrentView('detail'); setShowAlertPopup(false);
             };
@@ -1866,7 +1871,8 @@
                                         onDeleteWorker={deleteWorker}
                                     />
                                 )}
-                                {currentView === 'list' && !selectedOrder && <ListView orders={orders} onSelect={handleNavigate} onAdd={() => { window.history.pushState({ page: 'form' }, '', ''); setSelectedOrder(null); setCurrentView('form'); }} onStatusClick={setStatusPopupOrder} />}
+                                {/* 🌟 [수정] 작업 등록 시에는 'list'로 돌아가도록 명시적으로 설정 */}
+                                {currentView === 'list' && !selectedOrder && <ListView orders={orders} onSelect={handleNavigate} onAdd={() => { setReturnView('list'); window.history.pushState({ page: 'form' }, '', ''); setSelectedOrder(null); setCurrentView('form'); }} onStatusClick={setStatusPopupOrder} />}
                                 {currentView === 'detail' && <DetailView order={selectedOrder} onBack={() => window.history.back()} onUpdate={(data, logInfo, navigate, msg) => { if(data === null && logInfo === 'form') { window.history.pushState({ page: 'form' }, '', ''); setCurrentView('form'); } else { saveOrder(data, msg); } }} isAdmin={isAdmin} currentUserId={user?.uid} onStatusClick={setStatusPopupOrder} onMaterialStatusClick={(m, next)=>setMaterialPopupData({material:m, nextStatus:next})} />}
                                 {currentView === 'form' && <FormView order={selectedOrder} storage={storage} onSave={(data, logInfo) => { saveOrder(data, logInfo); window.history.back(); }} onDelete={async (id) => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id)); window.history.back(); }} onCancel={() => window.history.back()} isAdmin={isAdmin} currentUserId={user?.uid} />}
                                 {currentView === 'materials' && <MaterialManageView suppliers={suppliers} orders={orders} onUpdateOrder={saveOrder} onMaterialStatusClick={(m, next)=>setMaterialPopupData({material:m, nextStatus:next})} />}
