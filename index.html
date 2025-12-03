@@ -1681,7 +1681,12 @@
                 const { material, nextStatus } = materialPopupData;
                 const order = orders.find(o => o.id === material.orderId);
                 if (order) {
-                    const updated = order.materials.map(x => x.id === material.id ? { ...x, status: nextStatus, completedAt: nextStatus === '회수완료' ? new Date().toISOString() : x.completedAt } : x);
+                    // 🌟 FIX: Handle undefined completedAt by defaulting to null
+                    const updated = order.materials.map(x => x.id === material.id ? { 
+                        ...x, 
+                        status: nextStatus, 
+                        completedAt: nextStatus === '회수완료' ? new Date().toISOString() : (x.completedAt || null) 
+                    } : x);
                     await saveOrder({ ...order, materials: updated }, { type: 'material', msg: `자재 변경: ${material.item} (${material.status} → ${nextStatus})` });
                 }
                 setMaterialPopupData(null);
