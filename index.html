@@ -89,7 +89,7 @@
             Package, ChevronRight, ChevronLeft, Trash2, Edit3, Download,
             ChevronDown, ChevronUp, Wifi, ArrowRight, Phone, MapPin, Bell, X, Truck, 
             Search, AlertCircle, Sparkles, Paperclip, File, Lock, Key, User, HardHat, 
-            MinusCircle, Save, CheckCircle, Navigation, History, ShieldAlert, UploadCloud, Users
+            MinusCircle, Save, CheckCircle, Navigation, History, ShieldAlert, UploadCloud, Users, Boxes
         } from 'lucide-react';
 
         // --- Firebase Imports ---
@@ -131,7 +131,7 @@
             '대한아크릴': { phone: '02-7777-8888', email: 'acryl@daehan.com', address: '서울 중구 방산시장 A동', lat: 37.5670, lng: 127.0000 }
         };
 
-        // 🌟 작업자 목록 (상시 수정 가능하도록 변수로 관리)
+        // 🌟 작업자 목록
         const WORKERS = ['정대종', '조윤석', '이태의', '유시안', '윤진후', '김정태', '김한솔'];
 
         const MOCK_DATA = [
@@ -564,11 +564,11 @@
         };
 
         const CalendarView = ({ orders, onSelect, scheduleData, onUpdateSchedule, onAddSchedule }) => {
-            const [viewMode, setViewMode] = useState('delivery'); // 'delivery' | 'worker'
+            const [viewMode, setViewMode] = useState('delivery'); // 'delivery' | 'worker' | 'material_weekly'
             const [date, setDate] = useState(new Date());
-            const [scheduleModal, setScheduleModal] = useState(null); // { worker, date, content, id }
+            const [scheduleModal, setScheduleModal] = useState(null);
 
-            // --- Delivery Calendar Logic ---
+            // --- Delivery Calendar Logic (Monthly) ---
             const days = [];
             const year = date.getFullYear();
             const month = date.getMonth();
@@ -581,7 +581,7 @@
             for (let i = 0; i < firstDayIndex; i++) days.push(null);
             for (let i = 1; i <= lastDate; i++) days.push(new Date(year, month, i));
 
-            // --- Worker Calendar Logic ---
+            // --- Worker/Material Weekly Logic ---
             const getWeekDates = (baseDate) => {
                 const current = new Date(baseDate);
                 const day = current.getDay();
@@ -627,15 +627,30 @@
                 }
             };
 
+            // 🌟 자재 캘린더용 데이터 가공 (회수완료된 것도 모두 포함)
+            const getMaterialsForDate = (dateStr) => {
+                const list = [];
+                orders.forEach(o => {
+                    (o.materials || []).forEach(m => {
+                        if (m.date === dateStr && m.status !== '정보') {
+                            list.push({ ...m, orderName: o.itemName });
+                        }
+                    });
+                });
+                return list;
+            };
+
             return (
                 <div className="h-full flex flex-col animate-fade-in pb-10 min-h-0">
                     <div className="flex justify-between items-center mb-4 flex-shrink-0">
                         <div className="flex bg-slate-200 p-1 rounded-lg">
-                            <button onClick={()=>setViewMode('delivery')} className={`px-3 py-1 text-xs font-bold rounded ${viewMode==='delivery'?'bg-white shadow text-indigo-900':'text-gray-500'}`}>월간 (납품)</button>
-                            <button onClick={()=>setViewMode('worker')} className={`px-3 py-1 text-xs font-bold rounded ${viewMode==='worker'?'bg-white shadow text-indigo-900':'text-gray-500'}`}>주간 (작업자)</button>
+                            <button onClick={()=>setViewMode('delivery')} className={`px-2 py-1 text-[10px] md:text-xs font-bold rounded ${viewMode==='delivery'?'bg-white shadow text-indigo-900':'text-gray-500'}`}>월간(납품)</button>
+                            <button onClick={()=>setViewMode('worker')} className={`px-2 py-1 text-[10px] md:text-xs font-bold rounded ${viewMode==='worker'?'bg-white shadow text-indigo-900':'text-gray-500'}`}>주간(작업)</button>
+                            {/* 🌟 새로운 탭 추가: 주간(자재) */}
+                            <button onClick={()=>setViewMode('material_weekly')} className={`px-2 py-1 text-[10px] md:text-xs font-bold rounded ${viewMode==='material_weekly'?'bg-white shadow text-indigo-900':'text-gray-500'}`}>주간(자재)</button>
                         </div>
                         <div className="flex gap-2 items-center">
-                            <h2 className="text-lg font-bold">
+                            <h2 className="text-sm md:text-lg font-bold whitespace-nowrap">
                                 {viewMode === 'delivery' ? `${year}.${month + 1}` : weekStr}
                             </h2>
                             <div className="flex rounded border bg-white">
@@ -645,7 +660,7 @@
                                     else newDate.setDate(newDate.getDate() - 7);
                                     setDate(newDate);
                                 }} className="p-1 hover:bg-slate-50 border-r"><ChevronLeft size={16}/></button>
-                                <button onClick={() => setDate(new Date())} className="text-xs px-2 hover:bg-slate-50 font-bold">오늘</button>
+                                <button onClick={() => setDate(new Date())} className="text-xs px-2 hover:bg-slate-50 font-bold whitespace-nowrap">오늘</button>
                                 <button onClick={() => {
                                     const newDate = new Date(date);
                                     if(viewMode==='delivery') newDate.setMonth(month + 1);
@@ -692,14 +707,13 @@
                             })}
                             </div>
                         </div>
-                    ) : (
+                    ) : viewMode === 'worker' ? (
                         <div className="flex-1 bg-white border rounded-xl overflow-hidden flex flex-col shadow-sm min-h-0">
                             {/* Worker Header */}
                             <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr_1fr_1fr] bg-slate-100 border-b flex-shrink-0">
                                 <div className="p-2 text-center font-bold text-xs flex items-center justify-center bg-slate-200">이름</div>
                                 {weekDates.map((d, i) => {
                                     const isToday = getLocalDateString(d) === getLocalDateString(new Date());
-                                    const isWeekend = i >= 5;
                                     return (
                                         <div key={i} className={`p-2 text-center border-l text-xs font-bold flex flex-col ${isToday ? 'bg-indigo-50 text-indigo-700' : ''}`}>
                                             <span className={`${i===5?'text-blue-500':i===6?'text-red-500':''}`}>{['월','화','수','목','금','토','일'][i]}</span>
@@ -742,6 +756,57 @@
                                 ))}
                             </div>
                         </div>
+                    ) : (
+                        // 🌟 새로운 자재(발주) 캘린더 뷰 (주간)
+                        <div className="flex-1 bg-white border rounded-xl overflow-hidden flex flex-col shadow-sm min-h-0">
+                            {/* Material Header */}
+                            <div className="grid grid-cols-7 bg-slate-100 border-b flex-shrink-0">
+                                {weekDates.map((d, i) => {
+                                    const isToday = getLocalDateString(d) === getLocalDateString(new Date());
+                                    return (
+                                        <div key={i} className={`p-2 text-center border-l first:border-l-0 text-xs font-bold flex flex-col ${isToday ? 'bg-indigo-50 text-indigo-700' : ''}`}>
+                                            <span className={`${i===5?'text-blue-500':i===6?'text-red-500':''}`}>{['월','화','수','목','금','토','일'][i]}</span>
+                                            <span className="text-[10px] text-gray-500">{d.getDate()}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            {/* Material Grid */}
+                            <div className="flex-1 overflow-y-auto grid grid-cols-7">
+                                {weekDates.map((d, i) => {
+                                    const dateStr = getLocalDateString(d);
+                                    const materials = getMaterialsForDate(dateStr);
+                                    const isToday = dateStr === getLocalDateString(new Date());
+                                    
+                                    return (
+                                        <div key={i} className={`border-l first:border-l-0 border-b p-1 min-h-[150px] ${isToday ? 'bg-indigo-50/30' : ''}`}>
+                                            <div className="space-y-1">
+                                                {materials.map((m, idx) => {
+                                                    const isCompleted = m.status === '회수완료';
+                                                    return (
+                                                        <div key={idx} className={`text-[10px] p-1.5 rounded border shadow-sm ${isCompleted ? 'bg-gray-100 text-gray-500 border-gray-200' : 'bg-white border-indigo-100'}`}>
+                                                            <div className="flex justify-between mb-0.5">
+                                                                <span className={`font-bold ${isCompleted ? 'line-through' : 'text-indigo-700'}`}>{m.item}</span>
+                                                                <span className="text-gray-400">({m.quantity})</span>
+                                                            </div>
+                                                            <div className="truncate text-gray-500">{m.supplier}</div>
+                                                            <div className={`text-[9px] mt-1 inline-block px-1 rounded ${
+                                                                m.status==='발주'?'bg-yellow-100 text-yellow-700':
+                                                                m.status==='접수'?'bg-orange-100 text-orange-700':
+                                                                m.status==='배차'?'bg-cyan-100 text-cyan-700':
+                                                                m.status==='회수대기'?'bg-red-100 text-red-700 font-bold':
+                                                                'bg-gray-200 text-gray-500'
+                                                            }`}>{m.status}</div>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {materials.length === 0 && <div className="text-[10px] text-gray-300 text-center mt-4">-</div>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
                     )}
 
                     {scheduleModal && (
@@ -768,10 +833,6 @@
                 </div>
             )
         };
-
-        // ... DetailView, FormView, MaterialManageView components remain exactly the same ...
-        // (Due to length limits, assuming they are included unchanged as per instructions to only modify relevant parts)
-        // I will include them to ensure the file is complete and runnable.
 
         const DetailView = ({ order, onBack, onUpdate, isAdmin, currentUserId, onStatusClick, onMaterialStatusClick }) => {
             if (!order) return null;
@@ -1130,6 +1191,7 @@
             );
         };
 
+        // 🌟 복원됨: 수정필요html.txt 버전의 MaterialManageView (12시간 숨김 로직 추가)
         const MaterialManageView = ({ suppliers, orders, onUpdateOrder, onMaterialStatusClick }) => {
             const [selectedSupplier, setSelectedSupplier] = useState(null);
             const [isCustomMode, setIsCustomMode] = useState(false);
@@ -1151,15 +1213,29 @@
                 }
             }, [selectedSupplier, isCustomMode]);
 
-            const allMaterials = useMemo(() => {
+            // 🌟 수정됨: 회수완료된 자재 중 12시간이 지난 것은 목록에서만 숨김 처리 (데이터는 보존)
+            const displayedMaterials = useMemo(() => {
                 const all = [];
                 orders.forEach(o => { (o.materials || []).forEach(m => { all.push({ ...m, orderId: o.id, orderName: o.itemName }); }); });
-                return all.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-            }, [orders]);
+                const sorted = all.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
-            const displayedMaterials = (selectedSupplier && !isCustomMode) 
-                ? (suppliers[selectedSupplier] || []).filter(m => m.status !== '정보')
-                : allMaterials.filter(m => m.status !== '정보');
+                let list = (selectedSupplier && !isCustomMode) 
+                    ? (suppliers[selectedSupplier] || [])
+                    : sorted;
+                
+                // 🌟 중요: 12시간 지난 회수완료 항목 숨기기 필터
+                const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+                
+                return list.filter(m => {
+                    if (m.status === '정보') return false;
+                    // 회수완료이고 완료시간이 존재하며 12시간이 지났으면 숨김
+                    if (m.status === '회수완료' && m.completedAt) {
+                        const completedDate = new Date(m.completedAt);
+                        if (completedDate < twelveHoursAgo) return false;
+                    }
+                    return true;
+                });
+            }, [orders, suppliers, selectedSupplier, isCustomMode]);
 
             const currentSupplierInfo = useMemo(() => {
                 if (baseInfo) return baseInfo;
@@ -1178,8 +1254,23 @@
             }, [selectedSupplier, currentSupplierInfo, isCustomMode]);
 
             const sortedSuppliers = useMemo(() => {
-                return Object.keys(suppliers).map(name => ({ name, items: suppliers[name] })).sort((a,b) => a.name.localeCompare(b.name, 'ko'));
+                const list = Object.keys(suppliers).map(name => {
+                    const items = suppliers[name];
+                    const hasActive = items.some(m => ['발주', '접수', '회수대기', '작업중', '배차'].includes(m.status));
+                    const pickupCnt = items.filter(m => m.status === '회수대기').length;
+                    const activeCnt = items.filter(m => ['발주', '접수', '배차'].includes(m.status)).length;
+                    return { name, hasActive, pickupCnt, activeCnt, items };
+                });
+                return list.sort((a, b) => {
+                    if (a.hasActive && !b.hasActive) return -1;
+                    if (!a.hasActive && b.hasActive) return 1;
+                    return a.name.localeCompare(b.name, 'ko');
+                });
             }, [suppliers]);
+
+            const addRow = () => setBatchItems([...batchItems, { id: Date.now() + Math.random(), item: '', quantity: '' }]);
+            const removeRow = (id) => batchItems.length === 1 ? setBatchItems([{ id: Date.now(), item: '', quantity: '' }]) : setBatchItems(batchItems.filter(i => i.id !== id));
+            const updateRow = (id, field, value) => setBatchItems(batchItems.map(i => i.id === id ? { ...i, [field]: value } : i));
 
             const handleBatchAdd = async () => {
                 const validItems = batchItems.filter(i => i.item.trim() !== '');
@@ -1193,16 +1284,39 @@
                 }
 
                 const finalSupplier = isCustomMode ? batchHeader.supplier : selectedSupplier;
-                const newMaterials = validItems.map((itemData, index) => ({
-                    id: Date.now() + index, supplier: finalSupplier, item: itemData.item, quantity: itemData.quantity, status: quickAddType, date: batchHeader.date
-                }));
+                const isInfoRegistration = isCustomMode && validItems.length === 0;
+                const newMaterials = [];
+
+                if (isInfoRegistration) {
+                    newMaterials.push({ id: Date.now(), supplier: finalSupplier, item: "거래처 정보", quantity: "-", status: "정보", date: batchHeader.date, supplierInfo: { ...newSupplierInfo, ...getMockCoordinates(newSupplierInfo.address) } });
+                } else {
+                    validItems.forEach((itemData, index) => {
+                        const materialData = { id: Date.now() + index, supplier: finalSupplier, item: itemData.item, quantity: itemData.quantity, status: quickAddType, date: batchHeader.date };
+                        if (isCustomMode && index === 0) materialData.supplierInfo = { ...newSupplierInfo, ...getMockCoordinates(newSupplierInfo.address) };
+                        newMaterials.push(materialData);
+                    });
+                }
 
                 const updatedMaterials = [...(targetOrder.materials || []), ...newMaterials];
-                await onUpdateOrder({ ...targetOrder, materials: updatedMaterials }, { type: 'material', msg: `${quickAddType} 일괄 등록 (${validItems.length}건) - ${finalSupplier}` });
-                setQuickAdd(false); setBatchItems([{ id: Date.now(), item: '', quantity: '' }]);
+                await onUpdateOrder({ ...targetOrder, materials: updatedMaterials }, isInfoRegistration ? null : { type: 'material', msg: `${quickAddType} 일괄 등록 (${validItems.length}건) - ${finalSupplier}` });
+                setQuickAdd(false); setBatchItems([{ id: Date.now(), item: '', quantity: '' }]); setNewSupplierInfo({ phone: '', email: '', address: '' });
                 if(isCustomMode) setSelectedSupplier(null); 
             };
             
+            const handleDelete = async (m) => {
+                if(!window.confirm(`${m.item} 항목을 정말 삭제하시겠습니까?`)) return;
+                const order = orders.find(o => o.id === m.orderId);
+                if(order) {
+                    const updated = order.materials.filter(x => x.id !== m.id);
+                    await onUpdateOrder({ ...order, materials: updated }, {type: 'material', msg: `자재 삭제: ${m.item}`});
+                }
+            };
+
+            const toggleStatus = async (m) => {
+                if (m.status === '정보') return;
+                onMaterialStatusClick(m, m.status);
+            };
+
             return (
                 <div className="flex h-full gap-4 animate-fade-in flex-col md:flex-row overflow-hidden relative">
                     <div className="w-full md:w-1/3 overflow-y-auto space-y-2 pr-0 md:pr-2 max-h-[200px] md:max-h-full flex-shrink-0 scroll-touch">
@@ -1214,13 +1328,14 @@
                         </div>
                         {sortedSuppliers.map(s => (
                             <div key={s.name} onClick={() => { setSelectedSupplier(s.name); setIsCustomMode(false); }} className={`p-3 border rounded-lg cursor-pointer transition-all ${selectedSupplier === s.name && !isCustomMode ? 'bg-slate-800 text-white shadow-lg' : 'bg-white hover:bg-slate-50'}`}>
-                                <div className="font-bold">{s.name}</div> <div className="text-xs opacity-70">{s.items.length}건</div>
+                                <div className="flex justify-between items-center mb-1"><span className="font-bold">{s.name}</span>{s.pickupCnt > 0 && <span className="bg-indigo-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold animate-pulse">회수 {s.pickupCnt}</span>}</div>
+                                <div className="text-xs opacity-70">진행중 {s.activeCnt}건 / 총 {s.items.length}건</div>
                             </div>
                         ))}
                     </div>
                     <div className="w-full md:w-2/3 bg-white border rounded-xl p-4 md:p-6 flex flex-col overflow-hidden">
                         <div className="mb-4 pb-4 border-b flex-shrink-0 flex justify-between">
-                            <h2 className="text-2xl font-bold truncate">{selectedSupplier || "전체 발주 내역"}</h2>
+                            {isCustomMode ? <input className="text-2xl font-bold border-b border-gray-300 focus:border-indigo-500 outline-none w-full" placeholder="거래처명 입력" value={batchHeader.supplier} onChange={e => setBatchHeader({...batchHeader, supplier: e.target.value})}/> : <h2 className="text-2xl font-bold truncate">{selectedSupplier || "전체 발주 내역"}</h2>}
                             <button onClick={() => setQuickAdd(!quickAdd)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold flex items-center gap-1 flex-shrink-0 ml-2"><Plus size={14} /> 자재 등록</button>
                         </div>
                         {(quickAdd || isCustomMode) && (
@@ -1232,27 +1347,42 @@
                                         {orders.filter(o => !['납품완료'].includes(o.status)).map(o => <option key={o.id} value={o.id}>{o.itemName}</option>)}
                                     </select>
                                 </div>
-                                {isCustomMode && <input className="border p-2 rounded w-full mb-2 text-sm" placeholder="거래처명" value={batchHeader.supplier} onChange={e => setBatchHeader({ ...batchHeader, supplier: e.target.value })} />}
+                                <div className="flex gap-4 text-sm p-1 mb-2">
+                                    <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="quickAddType" checked={quickAddType === '발주'} onChange={()=>setQuickAddType('발주')}/> <span>구매 (발주)</span></label>
+                                    <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="quickAddType" checked={quickAddType === '접수'} onChange={()=>setQuickAddType('접수')}/> <span>가공 (접수)</span></label>
+                                    <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="quickAddType" checked={quickAddType === '배차'} onChange={()=>setQuickAddType('배차')}/> <span>배차</span></label>
+                                </div>
                                 {batchItems.map((row, index) => (
                                     <div key={row.id} className="flex gap-2 items-center mb-2">
-                                        <input placeholder="품목명" className="border p-2 rounded flex-1 text-sm" value={row.item} onChange={e => setBatchItems(batchItems.map(i => i.id === row.id ? { ...i, item: e.target.value } : i))} />
-                                        <input placeholder="수량" className="border p-2 rounded w-20 text-sm" value={row.quantity} onChange={e => setBatchItems(batchItems.map(i => i.id === row.id ? { ...i, quantity: e.target.value } : i))} />
+                                        <input placeholder="품목명" className="border p-2 rounded flex-1 text-sm" value={row.item} onChange={e => updateRow(row.id, 'item', e.target.value)} />
+                                        <input placeholder="수량" className="border p-2 rounded w-20 text-sm" value={row.quantity} onChange={e => updateRow(row.id, 'quantity', e.target.value)} />
+                                        <button onClick={() => removeRow(row.id)} className="text-gray-400 hover:text-red-500"><X size={18} /></button>
                                     </div>
                                 ))}
+                                <button onClick={addRow} className="text-xs text-indigo-600 font-bold flex items-center gap-1 hover:underline mt-1 mb-2"><Plus size={14}/> 품목 추가하기</button>
                                 <button onClick={handleBatchAdd} className="w-full bg-indigo-600 text-white py-2 rounded font-bold text-sm">등록</button>
                             </div>
                         )}
                         <div className="flex-1 overflow-y-auto scroll-touch">
                             <table className="w-full text-sm text-left">
-                                <thead className="bg-slate-50 border-b sticky top-0"><tr><th className="p-2">상태</th><th className="p-2">품목</th><th className="p-2">날짜</th></tr></thead>
+                                <thead className="bg-slate-50 border-b sticky top-0"><tr><th className="p-2 w-16">상태</th>{!selectedSupplier && <th className="p-2 w-20">거래처</th>}<th className="p-2">품목/수량</th><th className="p-2 text-right w-16">관리</th></tr></thead>
                                 <tbody>
                                     {displayedMaterials.map((m, i) => (
-                                        <tr key={i} className="border-b">
-                                            <td className="p-2"><MaterialStatusBadge status={m.status} onClick={() => onMaterialStatusClick(m, m.status)} /></td>
-                                            <td className="p-2 font-bold">{m.item} ({m.quantity})</td>
-                                            <td className="p-2 text-xs text-gray-500">{m.date}</td>
+                                        <tr key={i} className="border-b hover:bg-slate-50 group">
+                                            <td className="p-2 align-top pt-3"><MaterialStatusBadge status={m.status} onClick={() => toggleStatus(m)} /></td>
+                                            {!selectedSupplier && <td className="p-2 align-top pt-3 font-bold text-slate-700 text-xs break-words">{m.supplier}</td>}
+                                            <td className="p-2">
+                                                <div className="text-[10px] text-gray-400 mb-0.5">{m.date}</div>
+                                                <div className="font-bold text-slate-700">{m.item}</div>
+                                                <div className="text-xs text-gray-500">{m.quantity}</div>
+                                                <div className="text-[10px] text-indigo-500 mt-0.5">{m.orderName}</div>
+                                            </td>
+                                            <td className="p-2 text-right align-top pt-2">
+                                                <button onClick={()=>handleDelete(m)} className="p-1.5 hover:bg-red-100 text-red-600 rounded opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14}/></button>
+                                            </td>
                                         </tr>
                                     ))}
+                                    {displayedMaterials.length === 0 && <tr><td colSpan="5" className="p-8 text-center text-gray-400">내역이 없습니다.</td></tr>}
                                 </tbody>
                             </table>
                         </div>
@@ -1350,7 +1480,7 @@
                 return () => { unsubOrders(); unsubSchedules(); if(unsubLogs) unsubLogs(); };
             }, [user, db, appId, isAdmin]);
 
-            // Auto Cleanup Logics (File expiration, etc.)
+            // Auto Cleanup Logics (File expiration only, 🌟 자재 삭제 로직은 제거됨)
             useEffect(() => {
                 if (orders.length > 0 && isOnline && db && storage && !hasCheckedFileExpiration.current) {
                     const checkExpiredFiles = async () => {
