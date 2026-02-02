@@ -19,6 +19,7 @@
         body { 
             font-family: 'Pretendard', sans-serif; 
             overscroll-behavior: none; /* 모바일에서 당겨서 새로고침 등 방지 */
+            background-color: #f1f5f9; /* slate-100 */
         }
         
         /* 전체 화면 고정 (메뉴 고정, 내부 스크롤을 위함) */
@@ -57,20 +58,36 @@
             100% { transform: rotate(360deg); }
         }
 
+        /* 초기 로딩 화면 스타일 */
+        #loading-screen {
+            position: fixed; inset: 0; 
+            background: #f8fafc; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            z-index: 9999;
+        }
+        
+        /* 에러 표시 영역 스타일 */
+        #error-display {
+            display: none;
+            position: fixed; inset: 0; z-index: 10000;
+            background: #fff; padding: 20px;
+            overflow: auto; color: #ef4444; font-weight: bold;
+        }
+
         /* 아이폰 하단 안전 영역 대응 */
         .safe-area-bottom {
             padding-bottom: env(safe-area-inset-bottom);
         }
     </style>
 
-    <!-- 3. Import Map (스토리지 추가됨) -->
+    <!-- 3. Import Map (수정됨: lucide-react 최적화) -->
     <script type="importmap">
     {
         "imports": {
             "react": "https://esm.sh/react@18.2.0",
             "react-dom": "https://esm.sh/react-dom@18.2.0",
             "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-            "lucide-react": "https://esm.sh/lucide-react@0.330.0",
+            "lucide-react": "https://esm.sh/lucide-react@0.330.0?bundle",
             "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
             "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
             "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
@@ -79,13 +96,42 @@
     }
     </script>
 
-    <!-- 4. Babel -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- 4. Babel (버전 고정: 7.23.10) -->
+    <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
+    
+    <!-- 에러 핸들러 추가 -->
+    <script>
+        window.onerror = function(msg, url, line, col, error) {
+            const errorBox = document.getElementById('error-display');
+            if (errorBox) {
+                errorBox.style.display = 'block';
+                errorBox.innerHTML += `<div style="margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:10px;">
+                    <h3>⚠️ 시스템 오류 발생</h3>
+                    <p>${msg}</p>
+                    <small>${url}:${line}:${col}</small>
+                </div>`;
+                // 로딩 화면 숨김
+                const loader = document.getElementById('loading-screen');
+                if(loader) loader.style.display = 'none';
+            }
+            return false;
+        };
+    </script>
 </head>
 <body class="bg-slate-100">
+    <!-- 에러 표시용 컨테이너 -->
+    <div id="error-display"></div>
+
+    <!-- 초기 로딩 화면 (React 로드 전 표시) -->
+    <div id="loading-screen">
+        <div class="loader" style="width: 40px; height: 40px; border-width: 4px;"></div>
+        <p class="mt-4 text-slate-500 font-bold animate-pulse">시스템 접속 중...</p>
+    </div>
+
     <div id="root"></div>
 
-    <script type="text/babel" data-type="module">
+    <!-- 🌟 수정됨: data-presets="react" 추가하여 env 프리셋 오류 방지 -->
+    <script type="text/babel" data-type="module" data-presets="react">
         import React, { useState, useEffect, useMemo, useRef } from 'react';
         import { createPortal } from 'react-dom';
         import { createRoot } from 'react-dom/client';
@@ -1566,6 +1612,10 @@
             ];
 
             useEffect(() => {
+                // React가 마운트되면 로딩 화면 제거
+                const loader = document.getElementById('loading-screen');
+                if(loader) loader.style.display = 'none';
+
                 const handlePopState = (e) => {
                     if (currentView === 'detail' || currentView === 'form') {
                         setSelectedOrder(null);
