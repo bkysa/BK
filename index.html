@@ -1571,6 +1571,287 @@
             );
         };
 
+        // --- Checklist View Component ---
+        const ChecklistView = ({ orders, onNavigate, onSaveChecklist, checklistData }) => {
+            const [selectedOrderId, setSelectedOrderId] = useState(null);
+            
+            // 납품완료 전 단계의 모든 작업
+            const activeOrders = orders.filter(o => 
+                o.status !== '납품완료' && o.itemName !== '기타 자재 발주'
+            ).sort((a, b) => {
+                if (!a.deliveryDate) return 1;
+                if (!b.deliveryDate) return -1;
+                return new Date(a.deliveryDate) - new Date(b.deliveryDate);
+            });
+
+            const selectedOrder = activeOrders.find(o => o.id === selectedOrderId) || activeOrders[0];
+
+            // 선택된 작업의 체크리스트 항목들
+            const getChecklist = (orderId) => {
+                return checklistData[orderId] || [];
+            };
+
+            const toggleCheckItem = (orderId, itemIndex) => {
+                const current = getChecklist(orderId);
+                const updated = current.map((item, i) => 
+                    i === itemIndex ? { ...item, checked: !item.checked } : item
+                );
+                onSaveChecklist(orderId, updated);
+            };
+
+            const addCheckItem = (orderId, text) => {
+                if (!text.trim()) return;
+                const current = getChecklist(orderId);
+                const updated = [...current, { text: text.trim(), checked: false, id: Date.now().toString() }];
+                onSaveChecklist(orderId, updated);
+            };
+
+            const deleteCheckItem = (orderId, itemIndex) => {
+                const current = getChecklist(orderId);
+                const updated = current.filter((_, i) => i !== itemIndex);
+                onSaveChecklist(orderId, updated);
+            };
+
+            // 위클리 캘린더
+            const getWeekDates = () => {
+                const today = new Date();
+                const day = today.getDay();
+                const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+                const monday = new Date(today);
+                monday.setDate(diff);
+                const week = [];
+                for (let i = 0; i < 7; i++) {
+                    const d = new Date(monday);
+                    d.setDate(monday.getDate() + i);
+                    week.push(d);
+                }
+                return week;
+            };
+
+            const weekDates = getWeekDates();
+            const getLocalDateString = (d) => {
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const da = String(d.getDate()).padStart(2, '0');
+                return `${y}-${m}-${da}`;
+            };
+
+            const getOrdersForDate = (dateStr) => {
+                return activeOrders.filter(o => o.deliveryDate === dateStr);
+            };
+
+            const todayStr = getLocalDateString(new Date());
+
+            const [newItemText, setNewItemText] = useState('');
+            const inputRef = useRef(null);
+
+            const handleAddItem = () => {
+                if (selectedOrder && newItemText.trim()) {
+                    addCheckItem(selectedOrder.id, newItemText);
+                    setNewItemText('');
+                    inputRef.current?.focus();
+                }
+            };
+
+            const checklist = selectedOrder ? getChecklist(selectedOrder.id) : [];
+            const checkedCount = checklist.filter(i => i.checked).length;
+
+            return (
+                <div className="animate-fade-in flex flex-col gap-4 pb-10">
+                    {/* 위클리 달력 */}
+                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                        <div className="grid grid-cols-7">
+                            {weekDates.map((d, i) => {
+                                const dateStr = getLocalDateString(d);
+                                const isToday = dateStr === todayStr;
+                                const dayOrders = getOrdersForDate(dateStr);
+                                return (
+                                    <div key={i} className={`border-l first:border-l-0 p-2 min-h-[80px] ${isToday ? 'bg-indigo-50' : ''}`}>
+                                        <div className="text-center mb-1">
+                                            <div className={`text-[10px] font-bold ${i===5?'text-blue-500':i===6?'text-red-500':isToday?'text-indigo-700':'text-slate-500'}`}>
+                                                {['월','화','수','목','금','토','일'][i]}
+                                            </div>
+                                            <div className={`text-sm font-bold ${isToday?'bg-indigo-600 text-white rounded-full w-6 h-6 flex items-center justify-center mx-auto':'text-slate-700'}`}>
+                                                {d.getDate()}
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            {dayOrders.map((o, idx) => (
+                                                <button 
+                                                    key={idx} 
+                                                    onClick={() => setSelectedOrderId(o.id)}
+                                                    className={`w-full text-left text-[9px] px-1 py-0.5 rounded truncate font-bold transition-colors ${selectedOrder?.id === o.id ? 'bg-indigo-600 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                                                    title={o.itemName}
+                                                >
+                                                    {o.itemName}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* 본문: 좌측 목록 + 우측 체크리스트 */}
+                    <div className="flex gap-4 min-h-[400px]">
+                        {/* 좌측: 진행중 작업 목록 */}
+                        <div className="w-48 md:w-56 flex-shrink-0 bg-white rounded-xl border shadow-sm overflow-hidden flex flex-col">
+                            <div className="p-3 bg-slate-800 text-white text-sm font-bold">
+                                진행중 ({activeOrders.length})
+                            </div>
+                            <div className="flex-1 overflow-y-auto no-scrollbar">
+                                {activeOrders.length === 0 && (
+                                    <div className="p-4 text-sm text-gray-400 text-center">진행중인 작업 없음</div>
+                                )}
+                                {activeOrders.map(o => {
+                                    const cl = getChecklist(o.id);
+                                    const checked = cl.filter(i => i.checked).length;
+                                    const isSelected = (selectedOrder?.id === o.id);
+                                    return (
+                                        <button
+                                            key={o.id}
+                                            onClick={() => setSelectedOrderId(o.id)}
+                                            className={`w-full text-left p-3 border-b last:border-b-0 transition-colors ${isSelected ? 'bg-indigo-50 border-l-4 border-l-indigo-500' : 'hover:bg-slate-50'}`}
+                                        >
+                                            <div className={`font-bold text-xs mb-1 ${isSelected ? 'text-indigo-700' : 'text-slate-800'}`}>
+                                                {o.itemName}
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <StatusBadge status={o.status} />
+                                                {cl.length > 0 && (
+                                                    <span className={`text-[9px] font-bold ${checked === cl.length ? 'text-green-600' : 'text-gray-400'}`}>
+                                                        {checked}/{cl.length}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {o.deliveryDate && (
+                                                <div className="text-[9px] text-red-500 mt-1 font-bold">{o.deliveryDate} 마감</div>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* 우측: 체크리스트 상세 */}
+                        <div className="flex-1 bg-white rounded-xl border shadow-sm flex flex-col overflow-hidden">
+                            {!selectedOrder ? (
+                                <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+                                    좌측에서 작업을 선택하세요
+                                </div>
+                            ) : (
+                                <>
+                                    {/* 고정 헤더 */}
+                                    <div className="flex-shrink-0 border-b bg-white">
+                                        {/* 작업명 + 진행률 */}
+                                        <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <h3 className="font-bold text-base text-slate-800 truncate">{selectedOrder.itemName}</h3>
+                                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                    <StatusBadge status={selectedOrder.status} />
+                                                    {selectedOrder.deliveryDate && (
+                                                        <span className="text-xs text-red-500 font-bold">{selectedOrder.deliveryDate} 마감</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {checklist.length > 0 && (
+                                                <div className="flex-shrink-0 text-right">
+                                                    <div className="text-xs text-gray-500 font-bold">{checkedCount}/{checklist.length}</div>
+                                                    <div className="w-20 h-1.5 bg-gray-200 rounded-full mt-1 overflow-hidden">
+                                                        <div 
+                                                            className="h-full bg-indigo-500 rounded-full transition-all"
+                                                            style={{ width: `${checklist.length ? (checkedCount/checklist.length)*100 : 0}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {/* 클라이언트 정보 카드 */}
+                                        <div className="mx-4 mb-3 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 space-y-1.5">
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <User size={13} className="text-slate-400 flex-shrink-0" />
+                                                <span className="text-slate-500 flex-shrink-0">업체</span>
+                                                <span className="font-bold text-slate-700 truncate">{selectedOrder.clientName || <span className="text-gray-300 font-normal">미입력</span>}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <Phone size={13} className="text-slate-400 flex-shrink-0" />
+                                                <span className="text-slate-500 flex-shrink-0">연락처</span>
+                                                {selectedOrder.clientContact 
+                                                    ? <a href={`tel:${selectedOrder.clientContact}`} className="font-bold text-indigo-600 hover:underline truncate">{selectedOrder.clientContact}</a>
+                                                    : <span className="text-gray-300">미입력</span>
+                                                }
+                                            </div>
+                                            <div className="flex items-start gap-2 text-xs">
+                                                <MapPin size={13} className="text-slate-400 flex-shrink-0 mt-0.5" />
+                                                <span className="text-slate-500 flex-shrink-0">주소</span>
+                                                {selectedOrder.deliveryAddress 
+                                                    ? <a href={`https://map.naver.com/p/search/${encodeURIComponent(selectedOrder.deliveryAddress)}`} target="_blank" className="font-bold text-indigo-600 hover:underline break-all leading-relaxed">{selectedOrder.deliveryAddress}</a>
+                                                    : <span className="text-gray-300">미입력</span>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 체크 항목 목록 */}
+                                    <div className="flex-1 overflow-y-auto p-3 space-y-1 no-scrollbar">
+                                        {checklist.length === 0 && (
+                                            <div className="text-sm text-gray-400 text-center py-8">
+                                                아래에서 체크리스트 항목을 추가하세요
+                                            </div>
+                                        )}
+                                        {checklist.map((item, idx) => (
+                                            <div 
+                                                key={item.id || idx}
+                                                className={`flex items-center gap-2 p-2 rounded-lg group transition-colors ${item.checked ? 'bg-green-50' : 'hover:bg-slate-50'}`}
+                                            >
+                                                <button
+                                                    onClick={() => toggleCheckItem(selectedOrder.id, idx)}
+                                                    className={`flex-shrink-0 transition-colors ${item.checked ? 'text-green-500' : 'text-gray-300 hover:text-indigo-500'}`}
+                                                >
+                                                    {item.checked 
+                                                        ? <CheckCircle size={20} /> 
+                                                        : <MinusCircle size={20} className="opacity-30" />
+                                                    }
+                                                </button>
+                                                <span className={`flex-1 text-sm ${item.checked ? 'line-through text-gray-400' : 'text-slate-700'}`}>
+                                                    {item.text}
+                                                </span>
+                                                <button
+                                                    onClick={() => deleteCheckItem(selectedOrder.id, idx)}
+                                                    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all flex-shrink-0"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* 항목 추가 */}
+                                    <div className="p-3 border-t flex gap-2">
+                                        <input
+                                            ref={inputRef}
+                                            className="flex-1 border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400 bg-slate-50"
+                                            placeholder="새 항목 추가..."
+                                            value={newItemText}
+                                            onChange={e => setNewItemText(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && handleAddItem()}
+                                        />
+                                        <button
+                                            onClick={handleAddItem}
+                                            className="bg-indigo-600 text-white px-3 py-2 rounded-lg font-bold text-sm hover:bg-indigo-700 flex-shrink-0 flex items-center gap-1"
+                                        >
+                                            <Plus size={16} />
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         // --- Main App Component ---
 
         function App() {
@@ -1599,6 +1880,7 @@
             
             const [materialPopupData, setMaterialPopupData] = useState(null);
             const [logs, setLogs] = useState([]); 
+            const [checklistData, setChecklistData] = useState({}); // { orderId: [{text, checked, id}] }
             
             const hasCheckedCleanup = useRef(false);
             const hasCheckedFileExpiration = useRef(false);
@@ -1607,6 +1889,7 @@
             const menuItems = [
                 { id: 'dashboard', icon: LayoutDashboard, label: '현황' },
                 { id: 'calendar', icon: CalendarIcon, label: '일정' },
+                { id: 'checklist', icon: CheckCircle, label: '체크' },
                 { id: 'list', icon: FileText, label: '작업' },
                 { id: 'materials', icon: Truck, label: '발주' },
             ];
@@ -1685,7 +1968,15 @@
                     unsubLogs = onSnapshot(logQ, (snap) => setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
                 }
 
-                return () => { unsubOrders(); unsubSchedules(); unsubWorkers(); if(unsubLogs) unsubLogs(); };
+                // 5. Checklists
+                const clQ = query(collection(db, 'artifacts', appId, 'public', 'data', 'checklists'));
+                const unsubChecklists = onSnapshot(clQ, (snap) => {
+                    const data = {};
+                    snap.docs.forEach(d => { data[d.id] = d.data().items || []; });
+                    setChecklistData(data);
+                });
+
+                return () => { unsubOrders(); unsubSchedules(); unsubWorkers(); if(unsubLogs) unsubLogs(); unsubChecklists(); };
             }, [user, db, appId, isAdmin]);
 
             // 🌟 작업자 추가/삭제 함수
@@ -1792,6 +2083,18 @@
                 } catch(e) { console.error(e); }
             };
 
+            const saveChecklist = async (orderId, items) => {
+                if (!isOnline || !db) {
+                    setChecklistData(prev => ({ ...prev, [orderId]: items }));
+                    return;
+                }
+                try {
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'checklists', orderId);
+                    await setDoc(docRef, { items, updatedAt: serverTimestamp() });
+                    setChecklistData(prev => ({ ...prev, [orderId]: items }));
+                } catch(e) { console.error("체크리스트 저장 실패", e); }
+            };
+
             const executeStatusChange = async () => {
                 if(!statusPopupOrder || !pendingStatus) return;
                 const newData = { ...statusPopupOrder, status: pendingStatus };
@@ -1889,6 +2192,7 @@
                                 {currentView === 'calendar' && '일정'}
                                 {currentView === 'list' && '작업'}
                                 {currentView === 'materials' && '발주'}
+                                {currentView === 'checklist' && '체크리스트'}
                                 {currentView === 'detail' && '작업 상세'}
                                 {currentView === 'form' && (selectedOrder ? '작업 수정' : '새 작업 등록')}
                             </h2>
@@ -1930,6 +2234,7 @@
                                 {currentView === 'detail' && <DetailView order={selectedOrder} onBack={() => window.history.back()} onUpdate={(data, logInfo, navigate, msg) => { if(data === null && logInfo === 'form') { window.history.pushState({ page: 'form' }, '', ''); setCurrentView('form'); } else { saveOrder(data, msg); } }} isAdmin={isAdmin} currentUserId={user?.uid} onStatusClick={setStatusPopupOrder} onMaterialStatusClick={(m, next)=>setMaterialPopupData({material:m, nextStatus:next})} />}
                                 {currentView === 'form' && <FormView order={selectedOrder} storage={storage} onSave={(data, logInfo) => { saveOrder(data, logInfo); window.history.back(); }} onDelete={async (id) => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id)); window.history.back(); }} onCancel={() => window.history.back()} isAdmin={isAdmin} currentUserId={user?.uid} />}
                                 {currentView === 'materials' && <MaterialManageView suppliers={suppliers} orders={orders} onUpdateOrder={saveOrder} onMaterialStatusClick={(m, next)=>setMaterialPopupData({material:m, nextStatus:next})} />}
+                                {currentView === 'checklist' && <ChecklistView orders={orders} onNavigate={handleNavigate} onSaveChecklist={saveChecklist} checklistData={checklistData} />}
                             </div>
                         </div>
 
