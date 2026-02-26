@@ -1584,6 +1584,15 @@
                 onSaveChecklist(orderId, updated);
             };
 
+            const editCheckItem = (orderId, itemIndex, newText) => {
+                if (!newText.trim()) return;
+                const current = getChecklist(orderId);
+                const updated = current.map((item, i) =>
+                    i === itemIndex ? { ...item, text: newText.trim() } : item
+                );
+                onSaveChecklist(orderId, updated);
+            };
+
             // 위클리 캘린더
             const getWeekDates = () => {
                 const today = new Date();
@@ -1615,7 +1624,10 @@
             const todayStr = getLocalDateString(new Date());
 
             const [newItemText, setNewItemText] = useState('');
+            const [editingItemIndex, setEditingItemIndex] = useState(null);
+            const [editingItemText, setEditingItemText] = useState('');
             const inputRef = useRef(null);
+            const editInputRef = useRef(null);
 
             const handleAddItem = () => {
                 if (selectedOrder && newItemText.trim()) {
@@ -1625,8 +1637,27 @@
                 }
             };
 
+            const handleEditStart = (idx, text) => {
+                setEditingItemIndex(idx);
+                setEditingItemText(text);
+                setTimeout(() => editInputRef.current?.focus(), 50);
+            };
+
+            const handleEditSave = () => {
+                if (selectedOrder && editingItemIndex !== null) {
+                    editCheckItem(selectedOrder.id, editingItemIndex, editingItemText);
+                }
+                setEditingItemIndex(null);
+                setEditingItemText('');
+            };
+
             const checklist = selectedOrder ? getChecklist(selectedOrder.id) : [];
             const checkedCount = checklist.filter(i => i.checked).length;
+            // 미체크 항목 먼저, 체크된 항목은 하단으로
+            const sortedChecklist = [
+                ...checklist.map((item, idx) => ({ ...item, _origIdx: idx })).filter(i => !i.checked),
+                ...checklist.map((item, idx) => ({ ...item, _origIdx: idx })).filter(i => i.checked),
+            ];
 
             return (
                 <div className="animate-fade-in flex flex-col gap-4 pb-10">
@@ -1772,31 +1803,67 @@
                                                 아래에서 체크리스트 항목을 추가하세요
                                             </div>
                                         )}
-                                        {checklist.map((item, idx) => (
-                                            <div 
-                                                key={item.id || idx}
-                                                className={`flex items-center gap-2 p-2 rounded-lg group transition-colors ${item.checked ? 'bg-green-50' : 'hover:bg-slate-50'}`}
-                                            >
-                                                <button
-                                                    onClick={() => toggleCheckItem(selectedOrder.id, idx)}
-                                                    className={`flex-shrink-0 transition-colors ${item.checked ? 'text-green-500' : 'text-gray-300 hover:text-indigo-500'}`}
+                                        {sortedChecklist.map((item) => {
+                                            const idx = item._origIdx;
+                                            const isEditing = editingItemIndex === idx;
+                                            return (
+                                                <div
+                                                    key={item.id || idx}
+                                                    className={`flex items-center gap-2 p-2 rounded-lg group transition-colors ${item.checked ? 'bg-green-50' : 'hover:bg-slate-50'}`}
                                                 >
-                                                    {item.checked 
-                                                        ? <CheckCircle size={20} /> 
-                                                        : <MinusCircle size={20} className="opacity-30" />
-                                                    }
-                                                </button>
-                                                <span className={`flex-1 text-sm ${item.checked ? 'line-through text-gray-400' : 'text-slate-700'}`}>
-                                                    {item.text}
-                                                </span>
-                                                <button
-                                                    onClick={() => deleteCheckItem(selectedOrder.id, idx)}
-                                                    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all flex-shrink-0"
-                                                >
-                                                    <X size={14} />
-                                                </button>
-                                            </div>
-                                        ))}
+                                                    <button
+                                                        onClick={() => toggleCheckItem(selectedOrder.id, idx)}
+                                                        className={`flex-shrink-0 transition-colors ${item.checked ? 'text-green-500' : 'text-gray-300 hover:text-indigo-500'}`}
+                                                    >
+                                                        {item.checked
+                                                            ? <CheckCircle size={20} />
+                                                            : <MinusCircle size={20} className="opacity-30" />
+                                                        }
+                                                    </button>
+
+                                                    {isEditing ? (
+                                                        <input
+                                                            ref={editInputRef}
+                                                            className="flex-1 text-sm border border-indigo-400 rounded px-2 py-0.5 outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+                                                            value={editingItemText}
+                                                            onChange={e => setEditingItemText(e.target.value)}
+                                                            onKeyDown={e => {
+                                                                if (e.key === 'Enter') handleEditSave();
+                                                                if (e.key === 'Escape') { setEditingItemIndex(null); setEditingItemText(''); }
+                                                            }}
+                                                            onBlur={handleEditSave}
+                                                        />
+                                                    ) : (
+                                                        <span
+                                                            className={`flex-1 text-sm cursor-text ${item.checked ? 'line-through text-gray-400' : 'text-slate-700'}`}
+                                                            onDoubleClick={() => !item.checked && handleEditStart(idx, item.text)}
+                                                            title={item.checked ? '' : '더블클릭하여 수정'}
+                                                        >
+                                                            {item.text}
+                                                        </span>
+                                                    )}
+
+                                                    {!isEditing && (
+                                                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+                                                            {!item.checked && (
+                                                                <button
+                                                                    onClick={() => handleEditStart(idx, item.text)}
+                                                                    className="p-1 text-gray-300 hover:text-indigo-500 rounded"
+                                                                >
+                                                                    <Edit3 size={13} />
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                onClick={() => deleteCheckItem(selectedOrder.id, idx)}
+                                                                className="p-1 text-gray-300 hover:text-red-500 rounded"
+                                                            >
+                                                                <X size={13} />
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
 
                                     {/* 항목 추가 */}
