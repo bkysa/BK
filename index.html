@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>숨쉬는 깡통</title>
     
-    <!-- 🌟 홈 화면 아이콘 설정 (BK 로고) -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%230f172a'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='250' font-family='sans-serif' font-weight='bold' dy='.1em'%3EBK%3C/text%3E%3C/svg%3E">
     <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%230f172a'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='250' font-family='sans-serif' font-weight='bold' dy='.1em'%3EBK%3C/text%3E%3C/svg%3E">
 
@@ -130,7 +129,6 @@
 
     <div id="root"></div>
 
-    <!-- 🌟 수정됨: data-presets="react" 추가하여 env 프리셋 오류 방지 -->
     <script type="text/babel" data-type="module" data-presets="react">
         import React, { useState, useEffect, useMemo, useRef } from 'react';
         import { createPortal } from 'react-dom';
@@ -139,33 +137,27 @@
             LayoutDashboard, Plus, FileText, Calendar as CalendarIcon,
             Package, ChevronRight, ChevronLeft, Trash2, Edit3, Download,
             ChevronDown, ChevronUp, Wifi, ArrowRight, Phone, MapPin, Bell, X, Truck, 
-            Search, AlertCircle, Sparkles, Paperclip, File, Lock, Key, User, HardHat, 
-            MinusCircle, Save, CheckCircle, Navigation, History, ShieldAlert, UploadCloud, Users, Boxes, Settings
+            Search, Paperclip, File, Lock, Key, User, HardHat, 
+            MinusCircle, Save, CheckCircle, Navigation, History, ShieldAlert, UploadCloud, Settings
         } from 'lucide-react';
 
-        // --- Firebase Imports ---
         import { initializeApp } from 'firebase/app';
         import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
         import {
             getFirestore, collection, addDoc, updateDoc, deleteDoc, setDoc,
-            doc, onSnapshot, query, orderBy, serverTimestamp, limit, where
+            doc, onSnapshot, query, orderBy, serverTimestamp, limit
         } from 'firebase/firestore';
         import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
-        // ---------------------------------------------------------
-        // ✅ Firebase Config
-        // ---------------------------------------------------------
         const firebaseConfig = {
             apiKey: "AIzaSyB5W8qJbYMNyzPu8jmbAifCBH9qgZsQOJA",
             authDomain: "bk-manager-784a5.firebaseapp.com",
             projectId: "bk-manager-784a5",
             storageBucket: "bk-manager-784a5.firebasestorage.app",
             messagingSenderId: "16230700058",
-            appId: "1:16230700058:web:833a3d16f54cdd73d2ada3",
-            measurementId: "G-PMGKK5F8CP"
+            appId: "1:16230700058:web:833a3d16f54cdd73d2ada3"
         };
 
-        // --- Constants & Mock Data ---
         const COMPANY_INFO = {
             name: '숨쉬는 깡통',
             address: '경기도 포천시 군내면 유교리 243-7',
@@ -182,7 +174,6 @@
             '대한아크릴': { phone: '02-7777-8888', email: 'acryl@daehan.com', address: '서울 중구 방산시장 A동', lat: 37.5670, lng: 127.0000 }
         };
 
-        // 🌟 기본 작업자 목록 (DB 없을 시 초기값)
         const DEFAULT_WORKERS = ['정대종', '조윤석', '이태의', '유시안', '윤진후', '김정태', '김한솔'];
 
         const MOCK_DATA = [
@@ -199,7 +190,6 @@
             }
         ]; 
 
-        // --- Helper Functions ---
         const getDistance = (lat1, lon1, lat2, lon2) => {
             const R = 6371; 
             const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -221,7 +211,6 @@
             return `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
         };
 
-        // --- Helper Components ---
         
         const ModalOverlay = ({ children, onClose }) => {
             return createPortal(
@@ -235,7 +224,7 @@
         const StatusBadge = ({ status, onClick }) => {
             const colors = {
                 '설계중': 'bg-gray-100 text-gray-600 border border-gray-300',
-                '자재발주중': 'bg-yellow-100 text-yellow-700 border border-yellow-200', // 🌟 자재발주중 추가
+                '자재발주중': 'bg-yellow-100 text-yellow-700 border border-yellow-200',
                 '작업중': 'bg-blue-100 text-blue-700 border border-blue-200',
                 '작업완료': 'bg-green-100 text-green-700 border border-green-200 font-bold',
                 '도장/마감중': 'bg-purple-100 text-purple-700 border border-purple-200',
@@ -282,9 +271,6 @@
             <div onClick={onClick} className={`bg-white rounded-xl shadow-sm border border-slate-200 ${className}`}>{children}</div>
         );
 
-        const FileBox = ({size}) => <Package size={size}/>;
-
-        // --- Login Gate Component ---
         const LoginView = ({ onLogin }) => {
             const [code, setCode] = useState('');
             const [error, setError] = useState('');
@@ -335,8 +321,6 @@
                 </div>
             );
         };
-
-        // --- Components ---
 
         const Dashboard = ({ orders, stats, suppliers, onNavigate, onStatusClick }) => {
             const [activeStat, setActiveStat] = useState(null);
@@ -411,7 +395,7 @@
                     '작업완료': 2,
                     '도장/마감중': 3,
                     '납품대기': 4,
-                    '자재발주중': 5, // 🌟 우선순위 추가
+                    '자재발주중': 5,
                     '설계중': 6
                 };
 
@@ -566,7 +550,6 @@
                 .filter(o => (o.itemName || '').toLowerCase().includes(searchTerm.toLowerCase()))
                 .filter(o => o.itemName !== '기타 자재 발주') 
                 .forEach(o => {
-                    // 🌟 '자재발주중'은 설계 단계(준비 단계)에 포함
                     if (['설계중', '대기', '자재발주중'].includes(o.status)) groups.design.push(o);
                     else if (['작업중', '작업완료', '도장/마감중'].includes(o.status)) groups.prod.push(o);
                     else groups.done.push(o);
@@ -631,8 +614,7 @@
                 if (!scheduleModal) setIsEditingSchedule(false);
             }, [scheduleModal]);
 
-            // --- Delivery Calendar Logic (Monthly) ---
-            const days = [];
+                const days = [];
             const year = date.getFullYear();
             const month = date.getMonth();
             
@@ -644,8 +626,7 @@
             for (let i = 0; i < firstDayIndex; i++) days.push(null);
             for (let i = 1; i <= lastDate; i++) days.push(new Date(year, month, i));
 
-            // --- Worker/Material Weekly Logic ---
-            const getWeekDates = (baseDate) => {
+                const getWeekDates = (baseDate) => {
                 const current = new Date(baseDate);
                 const day = current.getDay();
                 const diff = current.getDate() - day + (day === 0 ? -6 : 1); // Monday based
@@ -690,7 +671,6 @@
                 }
             };
 
-            // 🌟 자재 캘린더용 데이터 가공 (회수완료된 것도 모두 포함)
             const getMaterialsForDate = (dateStr) => {
                 const list = [];
                 orders.forEach(o => {
@@ -826,7 +806,6 @@
                             </div>
                         </div>
                     ) : (
-                        // 🌟 새로운 자재(발주) 캘린더 뷰 (주간)
                         <div className="flex-1 bg-white border rounded-xl overflow-hidden flex flex-col shadow-sm min-h-0">
                             {/* Material Header */}
                             <div className="grid grid-cols-7 bg-slate-100 border-b flex-shrink-0">
@@ -962,7 +941,6 @@
             if (!order) return null;
             const canEdit = isAdmin || order.userId === currentUserId;
             const [mat, setMat] = useState({ supplier: '', item: '', quantity: '', status: '발주', date: new Date().toISOString().split('T')[0] });
-            const [link, setLink] = useState({ name: '', url: '' });
             const [showSuggestions, setShowSuggestions] = useState(false);
             const supplierOptions = Object.keys(BASE_SUPPLIER_INFO);
             const filteredSuppliers = supplierOptions.filter(s => s.includes(mat.supplier));
@@ -1020,7 +998,7 @@
 
                     <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col mb-4">
                         <div className="flex justify-between items-center mb-3">
-                            <h3 className="font-bold text-sm text-slate-700 flex gap-2"><FileBox size={16} /> 도면/파일</h3>
+                            <h3 className="font-bold text-sm text-slate-700 flex gap-2"><Package size={16} /> 도면/파일</h3>
                             <span className="text-xs text-gray-400">{(order.files || []).length}개</span>
                         </div>
                         
@@ -1254,7 +1232,7 @@
                                 <label className="text-xs font-bold text-gray-500">진행 상태</label>
                                 <select className="border p-2 rounded w-full" value={data.status} onChange={e=>setData({...data, status:e.target.value})}>
                                     <option>설계중</option>
-                                    <option>자재발주중</option> {/* 🌟 추가됨 */}
+                                    <option>자재발주중</option>
                                     <option>작업중</option>
                                     <option>작업완료</option>
                                     <option>도장/마감중</option>
@@ -1316,7 +1294,6 @@
             );
         };
 
-        // 🌟 복원됨: 수정필요html.txt 버전의 MaterialManageView (12시간 숨김 로직 추가)
         const MaterialManageView = ({ suppliers, orders, onUpdateOrder, onMaterialStatusClick }) => {
             const [selectedSupplier, setSelectedSupplier] = useState(null);
             const [isCustomMode, setIsCustomMode] = useState(false);
@@ -1338,7 +1315,6 @@
                 }
             }, [selectedSupplier, isCustomMode]);
 
-            // 🌟 수정됨: 회수완료된 자재 중 12시간이 지난 것은 목록에서만 숨김 처리 (데이터는 보존)
             const displayedMaterials = useMemo(() => {
                 const all = [];
                 orders.forEach(o => { (o.materials || []).forEach(m => { all.push({ ...m, orderId: o.id, orderName: o.itemName }); }); });
@@ -1348,7 +1324,6 @@
                     ? (suppliers[selectedSupplier] || [])
                     : sorted;
                 
-                // 🌟 중요: 12시간 지난 회수완료 항목 숨기기 필터
                 const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
                 
                 return list.filter(m => {
@@ -1442,7 +1417,6 @@
                 onMaterialStatusClick(m, m.status);
             };
 
-            // 🌟 수정 함수 추가: 자재 내용 수정 저장
             const handleEditSave = async () => {
                 if (!editingMaterial) return;
                 const order = orders.find(o => o.id === editingMaterial.orderId);
@@ -1538,7 +1512,6 @@
                         </div>
                     </div>
 
-                    {/* 🌟 자재 수정 팝업 (모달) 추가 */}
                     {editingMaterial && (
                         <ModalOverlay onClose={() => setEditingMaterial(null)}>
                             <div className="bg-white w-full max-w-sm rounded-xl p-6 shadow-2xl animate-fade-in" onClick={e=>e.stopPropagation()}>
@@ -1571,7 +1544,6 @@
             );
         };
 
-        // --- Checklist View Component ---
         const ChecklistView = ({ orders, onNavigate, onSaveChecklist, checklistData }) => {
             const [selectedOrderId, setSelectedOrderId] = useState(null);
             
@@ -1852,13 +1824,11 @@
             );
         };
 
-        // --- Main App Component ---
-
         function App() {
             const [user, setUser] = useState(null);
             const [orders, setOrders] = useState([]);
             const [schedules, setSchedules] = useState([]); 
-            const [workers, setWorkers] = useState([]); // 🌟 작업자 상태 추가
+            const [workers, setWorkers] = useState([]);
             const [loading, setLoading] = useState(true);
             const [isOnline, setIsOnline] = useState(false);
             const [connectionError, setConnectionError] = useState(null);
@@ -1868,7 +1838,6 @@
 
             const [currentView, setCurrentView] = useState('dashboard');
             const [selectedOrder, setSelectedOrder] = useState(null);
-            // 🌟 [수정] 이전 화면을 기억하기 위한 상태 변수 추가
             const [returnView, setReturnView] = useState('list');
             
             const [urgentCount, setUrgentCount] = useState(0);
@@ -1882,7 +1851,6 @@
             const [logs, setLogs] = useState([]); 
             const [checklistData, setChecklistData] = useState({}); // { orderId: [{text, checked, id}] }
             
-            const hasCheckedCleanup = useRef(false);
             const hasCheckedFileExpiration = useRef(false);
             const hasSeededWorkers = useRef(false); // 작업자 초기화 체크
 
@@ -1902,14 +1870,13 @@
                 const handlePopState = (e) => {
                     if (currentView === 'detail' || currentView === 'form') {
                         setSelectedOrder(null);
-                        // 🌟 [수정] 무조건 'list'가 아니라 저장된 returnView로 복귀
                         setCurrentView(returnView);
                     }
                 };
 
                 window.addEventListener('popstate', handlePopState);
                 return () => window.removeEventListener('popstate', handlePopState);
-            }, [currentView, returnView]); // 🌟 의존성 배열에 returnView 추가
+            }, [currentView, returnView]);
 
             const { auth, db, storage, appId } = useMemo(() => {
                 try {
@@ -1949,7 +1916,7 @@
                     setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
 
-                // 3. Workers (🌟 New)
+                // 3. Workers
                 const wQ = query(collection(db, 'artifacts', appId, 'public', 'data', 'workers'), orderBy('createdAt', 'asc'));
                 const unsubWorkers = onSnapshot(wQ, (snap) => {
                     if (snap.empty && !hasSeededWorkers.current) {
@@ -1979,7 +1946,6 @@
                 return () => { unsubOrders(); unsubSchedules(); unsubWorkers(); if(unsubLogs) unsubLogs(); unsubChecklists(); };
             }, [user, db, appId, isAdmin]);
 
-            // 🌟 작업자 추가/삭제 함수
             const addWorker = async (name) => {
                 if (!db || !isOnline) return;
                 try {
@@ -2055,7 +2021,6 @@
                 } catch (e) { alert("저장 실패: " + e.message); }
             };
 
-            // 🌟 스케줄 저장/수정 함수
             const updateSchedule = async (scheduleData) => {
                 if (!isOnline || !db) return;
                 try {
@@ -2108,7 +2073,6 @@
                 const { material, nextStatus } = materialPopupData;
                 const order = orders.find(o => o.id === material.orderId);
                 if (order) {
-                    // 🌟 FIX: Handle undefined completedAt by defaulting to null
                     const updated = order.materials.map(x => x.id === material.id ? { 
                         ...x, 
                         status: nextStatus, 
@@ -2137,7 +2101,6 @@
             }, [orders]);
 
             const handleNavigate = (order) => {
-                // 🌟 [수정] 상세 페이지로 가기 전에 현재 뷰를 저장
                 setReturnView(currentView);
                 window.history.pushState({ page: 'detail' }, '', '');
                 setSelectedOrder(order); setCurrentView('detail'); setShowAlertPopup(false);
@@ -2216,7 +2179,7 @@
 
                         <div className="h-full overflow-y-auto p-4 md:p-6 scroll-touch">
                             <div className={`max-w-5xl mx-auto ${['calendar', 'materials', 'detail'].includes(currentView) ? 'h-full' : ''}`}>
-                                {currentView === 'dashboard' && <Dashboard orders={orders} stats={stats} suppliers={suppliers} onNavigate={handleNavigate} onStatusClick={setStatusPopupOrder} isAdmin={isAdmin} currentUserId={user?.uid} />}
+                                {currentView === 'dashboard' && <Dashboard orders={orders} stats={stats} suppliers={suppliers} onNavigate={handleNavigate} onStatusClick={setStatusPopupOrder} />}
                                 {currentView === 'calendar' && (
                                     <CalendarView 
                                         orders={orders} 
@@ -2229,7 +2192,6 @@
                                         onDeleteWorker={deleteWorker}
                                     />
                                 )}
-                                {/* 🌟 [수정] 작업 등록 시에는 'list'로 돌아가도록 명시적으로 설정 */}
                                 {currentView === 'list' && !selectedOrder && <ListView orders={orders} onSelect={handleNavigate} onAdd={() => { setReturnView('list'); window.history.pushState({ page: 'form' }, '', ''); setSelectedOrder(null); setCurrentView('form'); }} onStatusClick={setStatusPopupOrder} />}
                                 {currentView === 'detail' && <DetailView order={selectedOrder} onBack={() => window.history.back()} onUpdate={(data, logInfo, navigate, msg) => { if(data === null && logInfo === 'form') { window.history.pushState({ page: 'form' }, '', ''); setCurrentView('form'); } else { saveOrder(data, msg); } }} isAdmin={isAdmin} currentUserId={user?.uid} onStatusClick={setStatusPopupOrder} onMaterialStatusClick={(m, next)=>setMaterialPopupData({material:m, nextStatus:next})} />}
                                 {currentView === 'form' && <FormView order={selectedOrder} storage={storage} onSave={(data, logInfo) => { saveOrder(data, logInfo); window.history.back(); }} onDelete={async (id) => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id)); window.history.back(); }} onCancel={() => window.history.back()} isAdmin={isAdmin} currentUserId={user?.uid} />}
@@ -2243,7 +2205,6 @@
                                 <div className="bg-white w-full max-w-xs rounded-xl shadow-2xl p-4 animate-fade-in" onClick={e=>e.stopPropagation()}>
                                     <h3 className="font-bold text-center mb-4 text-lg">상태 변경</h3>
                                     <div className="grid gap-2">
-                                        {/* 🌟 자재발주중 버튼 추가 */}
                                         {['설계중', '자재발주중', '작업중', '작업완료', '도장/마감중', '납품대기', '납품완료'].map(st => (
                                             <button key={st} onClick={() => setPendingStatus(st)} className={`py-3 rounded-lg font-bold text-sm transition-colors ${statusPopupOrder.status === st ? 'bg-slate-800 text-white' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}>{st}</button>
                                         ))}
