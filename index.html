@@ -2273,8 +2273,10 @@
             const addWorker = async (name) => {
                 if (!db || !isOnline) return;
                 try {
+                    const currentMax = workers.reduce((max, w) => (w.order != null ? Math.max(max, w.order) : max), -1);
                     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'workers'), {
                         name,
+                        order: currentMax + 1,
                         createdAt: serverTimestamp()
                     });
                 } catch (e) { alert("추가 실패: " + e.message); }
