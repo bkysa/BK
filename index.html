@@ -600,7 +600,7 @@
             );
         };
 
-        const CalendarView = ({ orders, onSelect, scheduleData, onUpdateSchedule, onAddSchedule, workers, onAddWorker, onDeleteWorker }) => {
+        const CalendarView = ({ orders, onSelect, scheduleData, onUpdateSchedule, onAddSchedule, workers, onAddWorker, onDeleteWorker, onUpdateWorker, onReorderWorker }) => {
             const [viewMode, setViewMode] = useState('delivery'); // 'delivery' | 'worker' | 'material_weekly'
             const [date, setDate] = useState(new Date());
             const [scheduleModal, setScheduleModal] = useState(null); // { worker, date, content, id }
@@ -609,6 +609,8 @@
             // 작업자 관리 모달 상태
             const [manageWorkersModal, setManageWorkersModal] = useState(false);
             const [newWorkerName, setNewWorkerName] = useState('');
+            const [editingWorkerId, setEditingWorkerId] = useState(null);
+            const [editingWorkerName, setEditingWorkerName] = useState('');
             const [mobileSelectedDay, setMobileSelectedDay] = useState(() => {
                 const today = new Date();
                 return today.getDay() === 0 ? 6 : today.getDay() - 1; // 0=월 ~ 6=일
@@ -1025,16 +1027,16 @@
 
                     {/* Manage Workers Modal */}
                     {manageWorkersModal && (
-                        <ModalOverlay onClose={() => setManageWorkersModal(null)}>
+                        <ModalOverlay onClose={() => { setManageWorkersModal(null); setEditingWorkerId(null); }}>
                             <div className="bg-white w-full max-w-sm rounded-xl p-6 shadow-2xl animate-fade-in" onClick={e=>e.stopPropagation()}>
                                 <div className="flex justify-between items-center mb-4">
                                     <h3 className="font-bold text-lg">작업자 명단 관리</h3>
-                                    <button onClick={()=>setManageWorkersModal(null)}><X size={20}/></button>
+                                    <button onClick={()=>{ setManageWorkersModal(null); setEditingWorkerId(null); }}><X size={20}/></button>
                                 </div>
                                 <div className="mb-4 flex gap-2">
                                     <input 
                                         className="border rounded px-3 py-2 text-sm flex-1"
-                                        placeholder="이름 입력"
+                                        placeholder="이름 입력 후 추가"
                                         value={newWorkerName}
                                         onChange={e => setNewWorkerName(e.target.value)}
                                         onKeyPress={e => e.key === 'Enter' && newWorkerName && (onAddWorker(newWorkerName), setNewWorkerName(''))}
@@ -1046,14 +1048,95 @@
                                         추가
                                     </button>
                                 </div>
-                                <div className="max-h-[300px] overflow-y-auto space-y-2">
-                                    {workers.map(w => (
-                                        <div key={w.id} className="flex justify-between items-center bg-slate-50 p-2 rounded">
-                                            <span>{w.name}</span>
-                                            <button onClick={() => onDeleteWorker(w.id)} className="text-red-500 hover:bg-red-100 p-1 rounded"><Trash2 size={16}/></button>
+                                <div className="max-h-[360px] overflow-y-auto space-y-1.5">
+                                    {workers.map((w, idx) => (
+                                        <div key={w.id} className="flex items-center gap-1.5 bg-slate-50 p-2 rounded group">
+                                            {/* 순서 버튼 */}
+                                            <div className="flex flex-col gap-0.5 flex-shrink-0">
+                                                <button
+                                                    onClick={() => onReorderWorker && onReorderWorker(idx, idx - 1)}
+                                                    disabled={idx === 0}
+                                                    className="p-0.5 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                                                    title="위로"
+                                                >
+                                                    <ChevronUp size={14}/>
+                                                </button>
+                                                <button
+                                                    onClick={() => onReorderWorker && onReorderWorker(idx, idx + 1)}
+                                                    disabled={idx === workers.length - 1}
+                                                    className="p-0.5 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                                                    title="아래로"
+                                                >
+                                                    <ChevronDown size={14}/>
+                                                </button>
+                                            </div>
+
+                                            {/* 이름 (편집 모드 or 표시 모드) */}
+                                            {editingWorkerId === w.id ? (
+                                                <input
+                                                    autoFocus
+                                                    className="border border-indigo-400 rounded px-2 py-1 text-sm flex-1 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                                    value={editingWorkerName}
+                                                    onChange={e => setEditingWorkerName(e.target.value)}
+                                                    onKeyPress={e => {
+                                                        if (e.key === 'Enter' && editingWorkerName.trim()) {
+                                                            onUpdateWorker && onUpdateWorker(w.id, editingWorkerName.trim());
+                                                            setEditingWorkerId(null);
+                                                        }
+                                                    }}
+                                                    onBlur={() => {
+                                                        if (editingWorkerName.trim() && editingWorkerName.trim() !== w.name) {
+                                                            onUpdateWorker && onUpdateWorker(w.id, editingWorkerName.trim());
+                                                        }
+                                                        setEditingWorkerId(null);
+                                                    }}
+                                                />
+                                            ) : (
+                                                <span
+                                                    className="flex-1 text-sm font-medium cursor-pointer hover:text-indigo-600 transition-colors"
+                                                    onClick={() => { setEditingWorkerId(w.id); setEditingWorkerName(w.name); }}
+                                                    title="클릭하여 이름 수정"
+                                                >
+                                                    {w.name}
+                                                </span>
+                                            )}
+
+                                            {/* 수정 / 삭제 버튼 */}
+                                            {editingWorkerId !== w.id && (
+                                                <button
+                                                    onClick={() => { setEditingWorkerId(w.id); setEditingWorkerName(w.name); }}
+                                                    className="text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 p-1 rounded transition-colors flex-shrink-0"
+                                                    title="이름 수정"
+                                                >
+                                                    <Edit3 size={14}/>
+                                                </button>
+                                            )}
+                                            {editingWorkerId === w.id && (
+                                                <button
+                                                    onClick={() => {
+                                                        if (editingWorkerName.trim()) {
+                                                            onUpdateWorker && onUpdateWorker(w.id, editingWorkerName.trim());
+                                                        }
+                                                        setEditingWorkerId(null);
+                                                    }}
+                                                    className="text-green-500 hover:bg-green-50 p-1 rounded transition-colors flex-shrink-0"
+                                                    title="저장"
+                                                >
+                                                    <Save size={14}/>
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={() => onDeleteWorker(w.id)}
+                                                className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1 rounded transition-colors flex-shrink-0"
+                                                title="삭제"
+                                            >
+                                                <Trash2 size={14}/>
+                                            </button>
                                         </div>
                                     ))}
+                                    {workers.length === 0 && <div className="text-center text-gray-400 text-sm py-6">등록된 작업자가 없습니다.</div>}
                                 </div>
+                                <p className="text-xs text-slate-400 mt-3 text-center">이름을 클릭하거나 ✏️ 버튼으로 수정 · ↑↓ 버튼으로 순서 변경</p>
                             </div>
                         </ModalOverlay>
                     )}
@@ -2137,15 +2220,36 @@
                 });
 
                 // 3. Workers
-                const wQ = query(collection(db, 'artifacts', appId, 'public', 'data', 'workers'), orderBy('createdAt', 'asc'));
+                const wQ = query(collection(db, 'artifacts', appId, 'public', 'data', 'workers'), orderBy('order', 'asc'));
                 const unsubWorkers = onSnapshot(wQ, (snap) => {
                     if (snap.empty && !hasSeededWorkers.current) {
                         // DB가 비어있으면 초기 렌더링 시에는 기본값 사용 (자동 저장은 하지 않음)
-                        setWorkers(DEFAULT_WORKERS.map(name => ({ id: name, name }))); 
+                        setWorkers(DEFAULT_WORKERS.map((name, idx) => ({ id: name, name, order: idx }))); 
                     } else {
-                        setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        // order 필드 없는 문서는 createdAt 기준 정렬
+                        docs.sort((a, b) => {
+                            if (a.order != null && b.order != null) return a.order - b.order;
+                            if (a.order != null) return -1;
+                            if (b.order != null) return 1;
+                            const ta = a.createdAt?.seconds || 0;
+                            const tb = b.createdAt?.seconds || 0;
+                            return ta - tb;
+                        });
+                        setWorkers(docs);
                     }
                     hasSeededWorkers.current = true;
+                }, (err) => {
+                    // order 필드 인덱스 없는 경우 createdAt으로 폴백
+                    const wQFallback = query(collection(db, 'artifacts', appId, 'public', 'data', 'workers'), orderBy('createdAt', 'asc'));
+                    onSnapshot(wQFallback, (snap2) => {
+                        if (snap2.empty && !hasSeededWorkers.current) {
+                            setWorkers(DEFAULT_WORKERS.map((name, idx) => ({ id: name, name, order: idx })));
+                        } else {
+                            setWorkers(snap2.docs.map(d => ({ id: d.id, ...d.data() })));
+                        }
+                        hasSeededWorkers.current = true;
+                    });
                 });
 
                 // 4. Logs
@@ -2187,6 +2291,37 @@
                     }
                     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'workers', id));
                 } catch (e) { alert("삭제 실패: " + e.message); }
+            };
+
+            const updateWorker = async (id, newName) => {
+                if (!db || !isOnline) return;
+                try {
+                    if (DEFAULT_WORKERS.includes(id) && !workers.some(w => w.id === id && w.createdAt)) {
+                        alert("기본 작업자는 DB에 저장되기 전까지 수정할 수 없습니다. 새 작업자를 추가하면 DB가 활성화됩니다.");
+                        return;
+                    }
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'workers', id), { name: newName });
+                } catch (e) { alert("수정 실패: " + e.message); }
+            };
+
+            const reorderWorker = async (fromIdx, toIdx) => {
+                if (toIdx < 0 || toIdx >= workers.length) return;
+                if (!db || !isOnline) return;
+                // 로컬에서 순서 변경 후 Firebase의 order 필드 일괄 업데이트
+                const reordered = [...workers];
+                const [moved] = reordered.splice(fromIdx, 1);
+                reordered.splice(toIdx, 0, moved);
+                try {
+                    await Promise.all(reordered.map((w, idx) => {
+                        if (DEFAULT_WORKERS.includes(w.id) && !w.createdAt) return Promise.resolve();
+                        return updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'workers', w.id), { order: idx });
+                    }));
+                    // DB에 저장된 작업자가 없으면 로컬 상태만 업데이트
+                    if (reordered.every(w => DEFAULT_WORKERS.includes(w.id) && !w.createdAt)) {
+                        // setWorkers는 외부에서 관리되므로 onSnapshot이 없으면 직접 업데이트 안됨
+                        // 실제 DB 작업자 있으면 onSnapshot이 자동 업데이트
+                    }
+                } catch (e) { alert("순서 변경 실패: " + e.message); }
             };
 
             // Auto Cleanup Logics (File expiration only)
@@ -2410,6 +2545,8 @@
                                         workers={workers}
                                         onAddWorker={addWorker}
                                         onDeleteWorker={deleteWorker}
+                                        onUpdateWorker={updateWorker}
+                                        onReorderWorker={reorderWorker}
                                     />
                                 )}
                                 {currentView === 'list' && !selectedOrder && <ListView orders={orders} onSelect={handleNavigate} onAdd={() => { setReturnView('list'); window.history.pushState({ page: 'form' }, '', ''); setSelectedOrder(null); setCurrentView('form'); }} onStatusClick={setStatusPopupOrder} />}
