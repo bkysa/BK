@@ -2220,28 +2220,25 @@
                 });
 
                 // 3. Workers
-                const wQ = query(collection(db, 'artifacts', appId, 'public', 'data', 'workers'), orderBy('order', 'asc'));
+                const wQ = query(collection(db, 'artifacts', appId, 'public', 'data', 'workers'), orderBy('createdAt', 'asc'));
                 const unsubWorkers = onSnapshot(wQ, (snap) => {
                     if (snap.empty && !hasSeededWorkers.current) {
-                        // DB가 비어있으면 초기 렌더링 시에는 기본값 사용 (자동 저장은 하지 않음)
                         setWorkers(DEFAULT_WORKERS.map((name, idx) => ({ id: name, name, order: idx }))); 
                     } else {
                         const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                        // order 필드 없는 문서는 createdAt 기준 정렬
+                        // order 필드 있는 것은 order 순서로, 없는 것은 뒤에 createdAt 순으로
                         docs.sort((a, b) => {
                             if (a.order != null && b.order != null) return a.order - b.order;
                             if (a.order != null) return -1;
                             if (b.order != null) return 1;
-                            const ta = a.createdAt?.seconds || 0;
-                            const tb = b.createdAt?.seconds || 0;
-                            return ta - tb;
+                            return 0;
                         });
                         setWorkers(docs);
                     }
                     hasSeededWorkers.current = true;
                 }, (err) => {
-                    // order 필드 인덱스 없는 경우 createdAt으로 폴백
-                    const wQFallback = query(collection(db, 'artifacts', appId, 'public', 'data', 'workers'), orderBy('createdAt', 'asc'));
+                    // createdAt 인덱스 없는 경우 필드 없이 조회
+                    const wQFallback = query(collection(db, 'artifacts', appId, 'public', 'data', 'workers'));
                     onSnapshot(wQFallback, (snap2) => {
                         if (snap2.empty && !hasSeededWorkers.current) {
                             setWorkers(DEFAULT_WORKERS.map((name, idx) => ({ id: name, name, order: idx })));
